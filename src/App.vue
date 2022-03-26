@@ -3,12 +3,12 @@
         <v-content class="center-y">
             <v-container fluid class="pa-1">
                 <v-row>
-                    <div height=100% class="pa-1 pl-4">
+                    <div height=100% class="pa-1 pl-6">
                         <ImageViewer />
                     </div>
-                    <div height=100% id="right" class="pa-1 pr-4">
+                    <div height=100% v-if="imgSrc" id="right" class="pa-1 pr-4">
                         <v-container fluid class="px-1 py-0">
-                            <v-row v-if="imgSrc">
+                            <v-row>
                                 <v-col cols=12 class="px-1 pt-0 pb-1">
                                     <ZoomPanel />
                                 </v-col>
@@ -47,14 +47,12 @@ export default {
         window.fstore = this.$store.state;
 
         // calc left panel
-        this.windowHelpers.leftPanelWidth = window.innerWidth - this.windowHelpers.rightPanelWidth -20;
+        this.updatePanelSize();
 
         // set up listener to repeat left panel calc whenever needed
         window.addEventListener('resize', () => {
-            console.log(window.innerWidth);
-            console.log(this.windowHelpers)
-            this.windowHelpers.leftPanelWidth = window.innerWidth - this.windowHelpers.rightPanelWidth -20;
-            this.windowHelpers.height = window.innerHeight;
+            this.updatePanelSize();
+            
         })
     },
     computed:{
@@ -67,8 +65,20 @@ export default {
         },
     },
     watch: {
-
+        'imgSrc': function() {
+            this.updatePanelSize();
+        }
     },
+    methods: {
+        updatePanelSize() {
+            if (this.imgSrc) {
+                this.windowHelpers.leftPanelWidth = window.innerWidth - this.windowHelpers.rightPanelWidth - 25;
+            } else {
+                this.windowHelpers.leftPanelWidth = window.innerWidth - 25;
+            }
+            this.windowHelpers.height = window.innerHeight - 25;
+        }
+    }
 }
 </script>
 

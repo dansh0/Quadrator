@@ -1,8 +1,8 @@
 <template>
-    <v-card :style="{'width':panelWidth}" color=tertiary height="100%" >
+    <v-card :style="{'width':panelWidth}" color=tertiary max-height=200 height="100%" >
         <v-container v-if="imgSrc" fluid class="pa-0">
             <v-row class="mx-2 justify-center">
-                <v-img rounded max-width="100%" max-height="100%" :src="imgSrc" class="my-2"/>
+                <v-img width="200px" height="180px" contain :src="imgSrc" class="my-2"/>
             </v-row>
         </v-container>
     </v-card>
