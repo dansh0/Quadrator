@@ -10,7 +10,7 @@ class Quadrat {
 
     initSamples() {
         for (let iSample=0; iSample<this.numOfSamples; iSample++) {
-            this.samples.push([])
+            this.samples.push({})
         }
     }
 }

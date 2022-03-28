@@ -7,8 +7,7 @@ Vue.use(Vuex)
 const store = new Vuex.Store({
     state: {
         count: 0,
-        // imgSrc: undefined,
-        imgSrc: "C:\\Users\\dan\\Documents\\Fortify\\quadrator\\images\\fish.jpg",
+        imgSrc: undefined,
         windowHelpers: {
             rightPanelWidth: 400,
             leftPanelWidth: 300,
@@ -71,11 +70,14 @@ const store = new Vuex.Store({
             "/"
         ],
         quadratSettings: {
-            'numOfSamples': 25,
+            'numOfSampleRows': 5,
+            'numOfSampleCols': 5,
             'nEdge': 4,
         },
         inputStatus: {
-            'sampleNumber': 0
+            'sampleNumber': 0,
+            'nodes': [],
+            'edgesNodes': []
         },
         quadratData: {},
         runningData: [] // list of quadrats

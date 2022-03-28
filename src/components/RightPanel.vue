@@ -7,7 +7,7 @@
         </v-card-title>
         <v-card-text  align="center" class="justify-center">
             <!-- <v-spacer /> -->
-            Sample {{ inputStatus.sampleNumber + 1}} of {{ quadratSettings.numOfSamples }}
+            Sample {{ inputStatus.sampleNumber + 1}} of {{ numOfSamples }}
         </v-card-text>
         <v-btn-toggle multiple background-color=tertiary @change="updateSamples()" v-model="toggles">
             <v-container grid-list-md text-s-center>
@@ -83,7 +83,7 @@ export default {
         },
         selectedSamples: function() {
             if (this.quadratData.samples) {
-                return this.quadratData.samples[this.inputStatus.sampleNumber]
+                return this.quadratData.samples[this.inputStatus.sampleNumber].codes
             } else {
                 return undefined
             }
@@ -94,6 +94,9 @@ export default {
                 codes.push(button.code)
             })
             return codes
+        },
+        numOfSamples: function() {
+            return this.quadratSettings.numOfSampleRows * this.quadratSettings.numOfSampleCols
         }
     },
     watch: {
@@ -120,7 +123,7 @@ export default {
         },
         nextSample() {
 
-            if (this.inputStatus.sampleNumber + 1 == this.quadratSettings.numOfSamples) {
+            if (this.inputStatus.sampleNumber + 1 == this.numOfSamples) {
                 // finish quadrat
                 console.log('Quadrat Complete');
             } else {
