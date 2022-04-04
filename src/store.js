@@ -86,7 +86,8 @@ const store = new Vuex.Store({
     },
     mutations: {
         newQuadrat (state) {
-            let quadrat = new Quadrat(state.quadratSettings.numOfSamples, state.imgSrc)
+            let numOfSamples = state.quadratSettings.numOfSampleRows * state.quadratSettings.numOfSampleCols
+            let quadrat = new Quadrat(numOfSamples, state.imgSrc)
             state.quadratData = quadrat;
         },
         changeImgSrc (state, imagePath) {

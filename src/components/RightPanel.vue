@@ -102,6 +102,9 @@ export default {
     watch: {
         'toggles': function() {
             console.log(this.selectedButtons)
+        }, 
+        'selectedSamples': function() {
+            this.updateToggles();
         }
     },
     mounted() {

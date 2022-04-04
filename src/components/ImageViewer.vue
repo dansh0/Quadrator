@@ -89,6 +89,9 @@ export default {
                 this.updateCanvasProperties();
             }
         },
+        'inputStatus.sampleNumber': function() {
+            this.updateSamplePoints();
+        }
     },
     mounted() {
 
@@ -154,9 +157,10 @@ export default {
 
             this.svgElem.selectAll('circle').remove();
 
-            this.svgElem.selectAll('circle')
+            this.svgElem.selectAll('nodeCircle')
                 .data(this.inputStatus.nodes).enter()
                 .append('circle')
+                    .attr('class', 'nodeCircle')
                     .attr('cx', data => data.x * this.imageElem.width)
                     .attr('cy', data => data.y * this.imageElem.height)
                     .attr('r', "1%")
@@ -177,6 +181,8 @@ export default {
 
             this.createGrid()
 
+            this.updateSamplePoints()
+
         },
         initNewQuadratSVG() {
 
@@ -185,8 +191,15 @@ export default {
             // clear previous images
             this.svgElem.selectAll().remove();
 
+            // clear previous data
+            this.inputStatus.edgesNodes = [];
+
             this.svgImage = this.svgElem.append('svg:image')
                 .attr('xlink:href', this.imageElem.src)
+
+            if (this.quadratData.samples) {
+                this.quadratData.resetSamples();
+            }
 
             // update canvas with new image
             this.updateCanvasProperties()
@@ -294,24 +307,67 @@ export default {
             // make points
             let samplePoints = []
             let edgesNodes = self.inputStatus.edgesNodes
-            edgesNodes[0].forEach((edgeNodeX, xIndex) => {
-                if (xIndex != edgesNodes[0].length - 1) {
-                    edgesNodes[1].forEach((edgeNodeY, yIndex) => {
-                        if (yIndex != edgesNodes[1].length - 1) {
-                            // TODO solve points here
+
+            edgesNodes[1].forEach((edgeNodeY, yIndex) => {
+                if (yIndex != edgesNodes[1].length - 1) {
+                    edgesNodes[0].forEach((edgeNodeX, xIndex) => {
+                        if (xIndex != edgesNodes[0].length - 1) {
+
+                            // Make an H bridge
+                            let xRand = Math.random();
+                            let xSamplePos = (xRand + xIndex) / self.quadratSettings.numOfSampleRows;
+                            let lineNodeX1 = {
+                                x: nodes[0].x + xSamplePos * (nodes[1].x - nodes[0].x),
+                                y: nodes[0].y + xSamplePos * (nodes[1].y - nodes[0].y)
+                            }
+                            let lineNodeX2 = {
+                                x: nodes[3].x + xSamplePos * (nodes[2].x - nodes[3].x),
+                                y: nodes[3].y + xSamplePos * (nodes[2].y - nodes[3].y)
+                            }
+
+                            // // Find position along bridge of H
+                            let yRand = Math.random();
+                            let ySamplePos = (yRand + yIndex) / self.quadratSettings.numOfSampleCols;
+
+                            let sampleNumber = yIndex * self.quadratSettings.numOfSampleRows + xIndex
+
+                            let samplePoint = this.quadratData.samples[sampleNumber]
+
+                            samplePoint.x = lineNodeX1.x + ySamplePos * (lineNodeX2.x - lineNodeX1.x),
+                            samplePoint.y = lineNodeX1.y + ySamplePos * (lineNodeX2.y - lineNodeX1.y),
+                            samplePoint.sampleNumber = sampleNumber
+                            
                         }
                     })
                 }
             })
 
-            this.svgElem.selectAll('circle')
-                .data(samplePoints).enter()
+            this.updateSamplePoints();
+
+        },
+
+        updateSamplePoints() {
+
+            if (!this.quadratData.samples[0].x) { return } // not initialized yet
+
+            let self = this
+
+            this.svgElem.selectAll('sampleCircle')
+                .data(this.quadratData.samples).enter()
                 .append('circle')
+                    .attr('class', 'sampleCircle')
                     .attr('cx', data => data.x * this.imageElem.width)
                     .attr('cy', data => data.y * this.imageElem.height)
                     .attr('r', "1%")
+                    .attr('sampleNumber', data => data.sampleNumber)
                     .attr('fill', 'purple')
-
+                    .on('click', function(event) {
+                        self.inputStatus.sampleNumber = parseInt(d3.select(this).attr('sampleNumber'));
+                    })
+                    .filter(function() {
+                        return parseInt(d3.select(this).attr("sampleNumber")) == self.inputStatus.sampleNumber;
+                    })
+                    .attr('fill', 'green')
 
             this.createGrid();
         },
@@ -319,8 +375,6 @@ export default {
             let self = this;
 
             if (!self.inputStatus.edgesNodes[0]) { return } // not initialized yet
-
-            console.log(this.inputStatus.edgesNodes)
 
             let line = d3.line()
                 .x(d => (d.x * self.imageElem.width))
