@@ -1,7 +1,8 @@
 <template>
     <v-card id="card" :style="{'width':panelWidth}" color=tertiary height="100%" >
     <!-- <v-card min-width=400 color=tertiary width=400 height="100%" > -->
-        <v-card-title  align="center" class="justify-center">
+        <v-text-field label="Quadrat Name" v-model="quadratData.name" class="px-5 pt-5 mt-0"></v-text-field>
+        <v-card-title  align="center" class="justify-center py-0">
             <!-- <v-spacer /> -->
             Select Species ID
         </v-card-title>
@@ -10,7 +11,7 @@
             Sample {{ inputStatus.sampleNumber + 1}} of {{ numOfSamples }}
         </v-card-text>
         <v-btn-toggle multiple background-color=tertiary @change="updateSamples()" v-model="toggles">
-            <v-container grid-list-md text-s-center>
+            <v-container grid-list-md>
                 <v-layout row wrap>
                     <v-flex v-for="button in this.buttons" :key="button.code">
                         <v-tooltip bottom>
@@ -118,7 +119,7 @@ export default {
             let fullLabel;
             if (this.hotKeySwitch) {
                 let hotKeyLabel = this.hotKeys[buttIndex];
-                fullLabel = hotKeyLabel ? button + ' [' + hotKeyLabel + ']' : button;
+                fullLabel = hotKeyLabel ? button + '[' + hotKeyLabel + ']' : button;
             } else {
                 fullLabel = button;
             }

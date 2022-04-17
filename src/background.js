@@ -44,9 +44,18 @@ async function createWindow() {
     ipcMain.handle('openFile', async (event) => {
         
         // select file
-        let filePath = await dialog.showOpenDialog({properties: ['openFile', 'multiSelections']})
+        let filePath = await dialog.showOpenDialog(win, {properties: ['openFile', 'multiSelections']})
 
         return filePath.filePaths[0]
+    });
+
+    // Selects a save file location from native dialog on request by renderer process
+    ipcMain.handle('appendFile', async (event) => {
+        
+        // select file
+        let filePath = await dialog.showSaveDialog(win, {title: "Append File", buttonLabel: "Append", filters: [{name: 'TXT/CSV', extensions: ['txt','csv']}]})
+
+        return filePath
     });
 }
 

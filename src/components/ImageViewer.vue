@@ -9,6 +9,7 @@
             <v-row class="mx-3 mb-3 justify-center">
                 <v-btn color=primary @click="selectImage()">Load Image</v-btn>
                 <v-btn color=primary @click="resetSelection()" class="ml-10">Reset Nodes</v-btn>
+                <v-btn color=primary @click="exportData()" class="ml-10">Export Data</v-btn>
             </v-row>
             <v-row align="center" class="mx-1 mb-1">
                 <!-- <v-img max-width="100%" max-height="100%" :src="imgSrc"/> -->
@@ -23,6 +24,7 @@
 import { mapState, mapMutations } from 'vuex';
 import * as d3 from 'd3';
 const { ipcRenderer } = require('electron');
+const fs = require('fs');
 
 export default {
     name: 'ImageViewer',
@@ -40,7 +42,8 @@ export default {
             'windowHelpers',
             'quadratData',
             'quadratSettings',
-            'inputStatus'
+            'inputStatus',
+            'buttons'
         ]),
         panelWidth: function() {
 
@@ -403,6 +406,28 @@ export default {
                     .attr('stroke-width', "0.25%")
                     .style("stroke-dasharray", ("3, 3"))
             })
+        },
+        exportData() {
+            let self = this;
+            ipcRenderer.invoke('appendFile')
+            .then((filePath) => {
+                console.log(filePath.filePath)
+                let dataOutput = ""
+                dataOutput = self.quadratData.toCSV(this.buttons)
+                if (fs.existsSync(filePath.filePath)) {
+                    fs.appendFile(filePath.filePath, dataOutput, function (err) {
+                        if (err) throw err;
+                        console.log('Saved!');
+                    });
+                } else {
+                    let outputWithHeader = "Quadrat Title,Image Path,ID Date,Species Code,Species,Group Name,Species Count,Species Coverage %\n" + dataOutput; 
+                    fs.writeFile(filePath.filePath, outputWithHeader, function (err) {
+                        if (err) throw err;
+                        console.log('Saved!');
+                    });
+                }
+
+            });
         }
     }
 }
