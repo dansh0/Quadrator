@@ -1,9 +1,8 @@
 <template>
     <v-card :style="{'width':panelWidth}" color=tertiary max-height=200 height="100%" >
-        <v-container v-if="imgSrc" fluid class="pa-0">
+        <v-container v-if="imgElem.src" fluid class="pa-0">
             <v-row class="mx-2 justify-center">
                 <svg id="zoomImage" width="100%" height="100%"/>
-                <!-- <v-img width="200px" height="180px" contain :src="imgSrc" class="my-2"/> -->
             </v-row>
         </v-container>
     </v-card>
@@ -19,28 +18,104 @@ export default {
     props: {
     },
     data: () => ({
-        
     }),
     computed: {
         ...mapState([
+            'imgElem',
             'imgSrc',
             'quadratData',
+            'inputStatus',
             'windowHelpers'
         ]),
         panelWidth: function() {
-           return this.windowHelpers.rightPanelWidth + 'px'
-        }
+            return this.windowHelpers.rightPanelWidth + 'px'
+        },
+        imageAspect: function() {
+            if (this.imgElem.naturalWidth) {
+                return this.imgElem.naturalWidth/this.imgElem.naturalHeight;
+            } else {
+                return 1;
+            }
+        },
+        sampleCoords: function() {
+            if (this.quadratData.samples) {
+                let sample = this.quadratData.samples[this.inputStatus.sampleNumber]
+                return [sample.x, sample.y] 
+            } else {
+                return undefined
+            }
+        },
     },
     watch: {
-        'quadratData.imgSrc': function() {
-            console.log(this.imgSrc)
-            d3.select('#zoomImage').append('svg:image')
-                .attr('xlink:href', this.imgSrc)
+        'imageAspect': function() {
+            console.log(this.imgElem)
+        },
+        'sampleCoords': function(coords) {
+            let svgElement = d3.select('#zoomImage');
+            let svgImage = d3.select('#svgImage');
+
+            let svgWidth = parseInt(svgElement.style('width'))
+            let svgHeight = parseInt(svgElement.style('height'))
+            let imageWidth = parseInt(svgImage.style('width'))
+            let imageHeight = parseInt(svgImage.style('height'))
+
+            svgImage.attr('x', parseInt(-coords[0]*imageWidth + svgWidth/2))
+            svgImage.attr('y', parseInt(-coords[1]*imageHeight + svgHeight/2))
+
+            // svgImage.attr('x', 10-parseInt(svgImage.style('width')))
+            // svgImage.attr('y', 10-parseInt(svgImage.style('height')))
+        },
+        'inputStatus.loadedIteration': function() {
+            // new image is loaded, update
+
+            // get aspect of input image
+            console.log(this.imageAspect)
+            let width = 4000
+
+
+            d3.select('#svgImage')
+                .attr('xlink:href', this.imgElem.src)
+                .attr('width', width)
+                .attr('height', width/this.imageAspect)
+
         }
     },
     mounted() {
-        d3.select('#zoomImage').append('svg:image')
-                .attr('xlink:href', this.imgSrc)
+
+        let svgElement = d3.select('#zoomImage');
+        
+        // init image
+        svgElement.append('svg:image')
+                .attr('id', 'svgImage')
+
+        let center = [
+            parseInt(svgElement.style('width')) / 2,
+            parseInt(svgElement.style('height')) / 2
+        ]
+
+        let dist = 15;
+
+        let crosshairPoints = [
+            {x: center[0], y: center[1]},
+            {x: center[0] + dist, y: center[1]},
+            {x: center[0] - dist, y: center[1]},
+            {x: center[0], y: center[1]},
+            {x: center[0], y: center[1] + dist},
+            {x: center[0], y: center[1] - dist},
+        ]
+
+        // init crosshair
+        let line = d3.line()
+            .x(d => (d.x))
+            .y(d => (d.y))
+
+        svgElement.append('path')
+            .datum(crosshairPoints)
+            .attr('d', line)
+            .attr('fill', 'none')
+            .attr('stroke', "black")
+            .attr('stroke-width', "1px")
+
     },
     methods: {
         ...mapMutations([

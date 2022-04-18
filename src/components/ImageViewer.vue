@@ -8,7 +8,7 @@
         <v-container v-if="imgSrc" grid-list-md text-xs-center>
             <v-row class="mx-3 mb-3 justify-center">
                 <v-btn color=primary @click="selectImage()">Load Image</v-btn>
-                <v-btn color=primary @click="resetSelection()" class="ml-10">Reset Nodes</v-btn>
+                <v-btn color=primary @click="initNewQuadratSVG()" class="ml-10">Reset Nodes</v-btn>
                 <v-btn color=primary @click="exportData()" class="ml-10">Export Data</v-btn>
             </v-row>
             <v-row align="center" class="mx-1 mb-1">
@@ -32,13 +32,14 @@ export default {
         
     },
     data: () => ({
-        imageElem: undefined,
+        // imgElem: undefined,
         svgElem: undefined,
         imageAspect: undefined
     }),
     computed: {
         ...mapState([
             'imgSrc',
+            'imgElem',
             'windowHelpers',
             'quadratData',
             'quadratSettings',
@@ -68,11 +69,11 @@ export default {
     },
     watch: {
         panelHeight: function() {
-            //update imageElem height
+            //update imgElem height
             // set height to maintain aspect
             if (this.imageAspect && this.imageAspect < this.panelAspect) {
-                this.imageElem.height = this.windowHelpers.height - 200;
-                this.imageElem.width = this.imageElem.height * this.imageAspect;
+                this.imgElem.height = this.windowHelpers.height - 200;
+                this.imgElem.width = this.imgElem.height * this.imageAspect;
             }
 
             // update canvas if applicable
@@ -83,8 +84,8 @@ export default {
         panelWidth: function() {
             // set height to maintain aspect
             if (this.imageAspect && this.imageAspect > this.panelAspect) {
-                this.imageElem.width = this.windowHelpers.leftPanelWidth - 50;
-                this.imageElem.height = this.imageElem.width / this.imageAspect;
+                this.imgElem.width = this.windowHelpers.leftPanelWidth - 50;
+                this.imgElem.height = this.imgElem.width / this.imageAspect;
             }
 
             // update canvas if applicable
@@ -98,7 +99,7 @@ export default {
     },
     mounted() {
 
-        this.initImageElem()
+        this.initimgElem()
 
         // this.loadImage("C:\\Users\\dan\\Documents\\Fortify\\quadrator\\images\\fish.jpg") // TEMP
     },
@@ -107,34 +108,37 @@ export default {
             'changeImgSrc',
             'newQuadrat'
         ]),
-        initImageElem() {
-            this.imageElem = document.createElement('img');
-            // this.imageElem.height = this.windowHelpers.height - 200;
-            this.imageElem.style.position = "absolute";
-            this.imageElem.style.top = 0;
-            this.imageElem.style.left = 0;
-            this.imageElem.style['z-index'] = 1;
-            this.imageElem.style['object-fit'] = 'contain';
+        initimgElem() {
+            // this.imgElem = document.createElement('img');
+            // this.imgElem.height = this.windowHelpers.height - 200;
+            this.imgElem.style.position = "absolute";
+            this.imgElem.style.top = 0;
+            this.imgElem.style.left = 0;
+            this.imgElem.style['z-index'] = 1;
+            this.imgElem.style['object-fit'] = 'contain';
 
             // reset size
-            this.imageElem.style.width = undefined;
-            this.imageElem.style.height = undefined;
+            this.imgElem.style.width = undefined;
+            this.imgElem.style.height = undefined;
 
-            this.imageElem.addEventListener('load', event => {
+            this.imgElem.addEventListener('load', event => {
 
                 // get aspect of input image
-                this.imageAspect = this.imageElem.naturalWidth/this.imageElem.naturalHeight;
+                this.imageAspect = this.imgElem.naturalWidth/this.imgElem.naturalHeight;
 
                 // set height or width to maintain aspect
                 if (this.imageAspect && this.imageAspect > this.panelAspect) {
-                    this.imageElem.width = this.windowHelpers.leftPanelWidth - 50;
-                    this.imageElem.height = this.imageElem.width / this.imageAspect;
+                    this.imgElem.width = this.windowHelpers.leftPanelWidth - 50;
+                    this.imgElem.height = this.imgElem.width / this.imageAspect;
                 } else {
-                    this.imageElem.height = this.windowHelpers.height - 200;
-                    this.imageElem.width = this.imageElem.height * this.imageAspect;
+                    this.imgElem.height = this.windowHelpers.height - 200;
+                    this.imgElem.width = this.imgElem.height * this.imageAspect;
                 } 
 
+                // increment counter
+                this.inputStatus.loadedIteration += 1
 
+                // init new quadrat
                 this.initNewQuadratSVG();
                 
             })
@@ -153,7 +157,7 @@ export default {
             this.changeImgSrc(filePath);
             this.newQuadrat();
 
-            this.imageElem.src = this.imgSrc;
+            this.imgElem.src = this.imgSrc;
 
         },
         makeCircles() {
@@ -164,14 +168,14 @@ export default {
                 .data(this.inputStatus.nodes).enter()
                 .append('circle')
                     .attr('class', 'nodeCircle')
-                    .attr('cx', data => data.x * this.imageElem.width)
-                    .attr('cy', data => data.y * this.imageElem.height)
+                    .attr('cx', data => data.x * this.imgElem.width)
+                    .attr('cy', data => data.y * this.imgElem.height)
                     .attr('r', "1%")
                     .attr('fill', 'red')
 
             let line = d3.line()
-                .x(d => (d.x * this.imageElem.width))
-                .y(d => (d.y * this.imageElem.height))
+                .x(d => (d.x * this.imgElem.width))
+                .y(d => (d.y * this.imgElem.height))
                 
             this.svgElem.selectAll('path').remove();
 
@@ -196,9 +200,10 @@ export default {
 
             // clear previous data
             this.inputStatus.edgesNodes = [];
+            this.inputStatus.nodes.length = 0;
 
             this.svgImage = this.svgElem.append('svg:image')
-                .attr('xlink:href', this.imageElem.src)
+                .attr('xlink:href', this.imgElem.src)
 
             if (this.quadratData.samples) {
                 this.quadratData.resetSamples();
@@ -216,8 +221,8 @@ export default {
                 let coords = d3.pointer(event);
                 console.log(coords)
 
-                let xScale = coords[0] / self.imageElem.width;
-                let yScale = coords[1] / self.imageElem.height;
+                let xScale = coords[0] / self.imgElem.width;
+                let yScale = coords[1] / self.imgElem.height;
 
                 self.inputStatus.nodes.push({x: xScale, y: yScale});
 
@@ -246,9 +251,7 @@ export default {
 
         },
         resetSelection() {
-            this.inputStatus.nodes.length = 0;
 
-            this.initNewQuadratSVG()
         },
         updateCanvasProperties() {
             // get canvas tag
@@ -256,22 +259,22 @@ export default {
             
 
             // update canvas
-            // this.svgElem.width = this.imageElem.width;
-            // this.svgElem.height = this.imageElem.height;
+            // this.svgElem.width = this.imgElem.width;
+            // this.svgElem.height = this.imgElem.height;
 
 
 
             // let ctx = this.svgElem.getContext('2d');
-            // ctx.drawImage(this.imageElem, 0, 0, this.imageElem.width, this.imageElem.height);
+            // ctx.drawImage(this.imgElem, 0, 0, this.imgElem.width, this.imgElem.height);
             
             // update canvas size
-            this.svgElem.style('width', this.imageElem.width);
-            this.svgElem.style('height', this.imageElem.height);
+            this.svgElem.style('width', this.imgElem.width);
+            this.svgElem.style('height', this.imgElem.height);
 
             // update image size
             this.svgImage
-            .attr('width', this.imageElem.width)
-            .attr('height', this.imageElem.height)
+            .attr('width', this.imgElem.width)
+            .attr('height', this.imgElem.height)
 
             this.makeCircles()
 
@@ -359,8 +362,8 @@ export default {
                 .data(this.quadratData.samples).enter()
                 .append('circle')
                     .attr('class', 'sampleCircle')
-                    .attr('cx', data => data.x * this.imageElem.width)
-                    .attr('cy', data => data.y * this.imageElem.height)
+                    .attr('cx', data => data.x * this.imgElem.width)
+                    .attr('cy', data => data.y * this.imgElem.height)
                     .attr('r', "1%")
                     .attr('sampleNumber', data => data.sampleNumber)
                     .attr('fill', 'purple')
@@ -380,8 +383,8 @@ export default {
             if (!self.inputStatus.edgesNodes[0]) { return } // not initialized yet
 
             let line = d3.line()
-                .x(d => (d.x * self.imageElem.width))
-                .y(d => (d.y * self.imageElem.height))
+                .x(d => (d.x * self.imgElem.width))
+                .y(d => (d.y * self.imgElem.height))
                 
             // self.svgElem.selectAll('path').remove();
 

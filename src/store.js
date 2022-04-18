@@ -8,6 +8,7 @@ const store = new Vuex.Store({
     state: {
         count: 0,
         imgSrc: undefined,
+        imgElem: document.createElement('img'),
         windowHelpers: {
             rightPanelWidth: 400,
             leftPanelWidth: 300,
@@ -77,7 +78,8 @@ const store = new Vuex.Store({
         inputStatus: {
             'sampleNumber': 0,
             'nodes': [],
-            'edgesNodes': []
+            'edgesNodes': [],
+            'loadedIteration': 0,
         },
         quadratData: {},
         runningData: [] // list of quadrats
