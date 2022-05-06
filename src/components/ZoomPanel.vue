@@ -1,7 +1,7 @@
 <template>
     <v-card :style="{'width':panelWidth}" color=tertiary max-height=200 height="100%" >
         <v-container v-if="imgElem.src" fluid class="pa-0">
-            <v-row class="mx-2 justify-center">
+            <v-row class="mx-2 py-2 justify-center">
                 <svg id="zoomImage" width="100%" height="100%"/>
             </v-row>
         </v-container>
@@ -18,6 +18,7 @@ export default {
     props: {
     },
     data: () => ({
+        zoomWidth: 4000
     }),
     computed: {
         ...mapState([
@@ -59,8 +60,12 @@ export default {
             let imageWidth = parseInt(svgImage.style('width'))
             let imageHeight = parseInt(svgImage.style('height'))
 
+            let aspectRatio = this.imgElem.naturalWidth/this.imgElem.naturalHeight;
+
             svgImage.attr('x', parseInt(-coords[0]*imageWidth + svgWidth/2))
             svgImage.attr('y', parseInt(-coords[1]*imageHeight + svgHeight/2))
+            svgImage.attr('width', this.zoomWidth)
+            svgImage.attr('height', this.zoomWidth/aspectRatio)
 
             // svgImage.attr('x', 10-parseInt(svgImage.style('width')))
             // svgImage.attr('y', 10-parseInt(svgImage.style('height')))
@@ -70,13 +75,9 @@ export default {
 
             // get aspect of input image
             console.log(this.imageAspect)
-            let width = 4000
-
 
             d3.select('#svgImage')
                 .attr('xlink:href', this.imgElem.src)
-                .attr('width', width)
-                .attr('height', width/this.imageAspect)
 
         }
     },

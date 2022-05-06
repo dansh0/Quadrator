@@ -108,6 +108,9 @@ export default {
             'changeImgSrc',
             'newQuadrat'
         ]),
+        alert(alertString) {
+            ipcRenderer.invoke('alert', alertString);
+        },
         initimgElem() {
             // this.imgElem = document.createElement('img');
             // this.imgElem.height = this.windowHelpers.height - 200;
@@ -419,7 +422,10 @@ export default {
                 dataOutput = self.quadratData.toCSV(this.buttons)
                 if (fs.existsSync(filePath.filePath)) {
                     fs.appendFile(filePath.filePath, dataOutput, function (err) {
-                        if (err) throw err;
+                        if (err) {
+                            self.alert("Append/Save Failed. Make sure your file is not open in other programs")
+                            throw err;
+                        }
                         console.log('Saved!');
                     });
                 } else {

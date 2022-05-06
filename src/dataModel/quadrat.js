@@ -1,10 +1,12 @@
+const path = require('path')
+
 class Quadrat {
 
     constructor(numOfSamples, imgSrc) {
         this.numOfSamples = numOfSamples;
         this.imgSrc = imgSrc;
         this.samples = [];
-        this.name = undefined
+        this.name = path.parse(imgSrc).name
         this.initSamples();
     }
 
@@ -35,7 +37,7 @@ class Quadrat {
                     // find species name
                     let codeIndex = speciesList.map(spec => spec.code).indexOf(code)
                     let codeSpecies = speciesList[codeIndex].species;
-                    let codeGroup = speciesList[codeIndex].group;
+                    let codeGroup = speciesList[codeIndex].group1 + ' - ' + speciesList[codeIndex].group2;
                     console.log(codeGroup)
                     // init at count of 1
                     codes[code] = {count: 1, species: codeSpecies, group: codeGroup}

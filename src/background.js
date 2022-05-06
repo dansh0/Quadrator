@@ -14,8 +14,8 @@ protocol.registerSchemesAsPrivileged([
 async function createWindow() {
     // Create the browser window.
     const win = new BrowserWindow({
-        width: 1920,
-        height: 1080,
+        width: 1500,
+        height: 950,
         setBackgroundColor: '#111111',
         autoHideMenuBar: true,
         webPreferences: {
@@ -26,7 +26,7 @@ async function createWindow() {
             contextIsolation: !process.env.ELECTRON_NODE_INTEGRATION,
             // nodeIntegration: true,
             // contextIsolation: false,
-            webSecurity: process.env.NODE_ENV !== 'development' 
+            webSecurity: false
         }
     })
 
@@ -53,9 +53,17 @@ async function createWindow() {
     ipcMain.handle('appendFile', async (event) => {
         
         // select file
-        let filePath = await dialog.showSaveDialog(win, {title: "Append File", buttonLabel: "Append", filters: [{name: 'TXT/CSV', extensions: ['txt','csv']}]})
+        let filePath = await dialog.showSaveDialog(win, {title: "Append File", buttonLabel: "Append", filters: [{name: 'CSV', extensions: ['csv']},{name: 'TXT', extensions: ['txt']}]})
 
         return filePath
+    });
+
+    // Pops up an alert
+    ipcMain.handle('alert', (event, alertString) => {
+        
+        // select file
+        dialog.showMessageBox(win, {message: alertString, type: 'error', title: 'Alert'})
+
     });
 }
 
