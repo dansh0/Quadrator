@@ -18,7 +18,8 @@ export default {
     props: {
     },
     data: () => ({
-        zoomWidth: 4000
+        zoomWidth: 4000,
+        zoomWidthOptions: [1000, 2000, 4000]
     }),
     computed: {
         ...mapState([
@@ -51,21 +52,9 @@ export default {
         'imageAspect': function() {
             console.log(this.imgElem)
         },
-        'sampleCoords': function(coords) {
-            let svgElement = d3.select('#zoomImage');
-            let svgImage = d3.select('#svgImage');
-
-            let svgWidth = parseInt(svgElement.style('width'))
-            let svgHeight = parseInt(svgElement.style('height'))
-            let imageWidth = parseInt(svgImage.style('width'))
-            let imageHeight = parseInt(svgImage.style('height'))
-
-            let aspectRatio = this.imgElem.naturalWidth/this.imgElem.naturalHeight;
-
-            svgImage.attr('x', parseInt(-coords[0]*imageWidth + svgWidth/2))
-            svgImage.attr('y', parseInt(-coords[1]*imageHeight + svgHeight/2))
-            svgImage.attr('width', this.zoomWidth)
-            svgImage.attr('height', this.zoomWidth/aspectRatio)
+        'sampleCoords': function() {
+            
+            this.updateZoom();
 
             // svgImage.attr('x', 10-parseInt(svgImage.style('width')))
             // svgImage.attr('y', 10-parseInt(svgImage.style('height')))
@@ -117,10 +106,41 @@ export default {
             .attr('stroke', "black")
             .attr('stroke-width', "1px")
 
+        // click function
+        svgElement.on('click', this.changeZoom)
+
     },
     methods: {
         ...mapMutations([
         ]),
+        changeZoom() {
+            let currentIndex = this.zoomWidthOptions.indexOf(this.zoomWidth);
+            let newIndex = (currentIndex + 1) % (this.zoomWidthOptions.length) // wraps
+            this.zoomWidth = this.zoomWidthOptions[newIndex]
+            console.log(this.zoomWidth)
+            this.updateZoom()
+
+        },
+        updateZoom() {
+
+            let svgElement = d3.select('#zoomImage');
+            let svgImage = d3.select('#svgImage');
+
+            let aspectRatio = this.imgElem.naturalWidth/this.imgElem.naturalHeight;
+
+            svgImage.attr('width', this.zoomWidth)
+            svgImage.attr('height', this.zoomWidth/aspectRatio)
+
+            let svgWidth = parseInt(svgElement.style('width'))
+            let svgHeight = parseInt(svgElement.style('height'))
+            let imageWidth = parseInt(svgImage.style('width'))
+            let imageHeight = parseInt(svgImage.style('height'))
+
+
+            svgImage.attr('x', parseInt(-this.sampleCoords[0]*imageWidth + svgWidth/2))
+            svgImage.attr('y', parseInt(-this.sampleCoords[1]*imageHeight + svgHeight/2))
+
+        }
     }
 }
 </script>
