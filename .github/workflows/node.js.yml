@@ -10,21 +10,55 @@ on:
     branches: [ main ]
 
 jobs:
+  bump-version:
+    name: "Bump Version"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: '2'
+      - name: "cat package.json"
+        run: cat ./package.json
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v3
+        with:
+          node-version: 12
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: "Automated Version Bump"
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          oldVersion=$(echo $(git show $(git log --first-parent -1 --skip 1 --pretty=format:"%H"):package.json) | jq -r ".version")
+          echo "$oldVersion"
+          IFS='.' read -r -a versionArray <<< "$oldVersion"
+          ((versionArray[2]=versionArray[2]+1))
+          newVersion="${versionArray[@]}"
+          newVersion=${newVersion// /.}
+          npm version "$newVersion"
+          git push origin ${{ github.ref }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        
   build-exe:
     name: "Build Quadrator"
     runs-on: windows-latest
 
     steps:
       - name: "Checkout source code"
-        uses: "actions/checkout@v2"
-        with:
-          ref: ${{ github.ref }}
-      - name: "Setup Node.js"
-        uses: "actions/setup-node@v1"
+        uses: actions/checkout@v3
+      - name: "Setup Node"
+        uses: actions/setup-node@v3
         with:
           node-version: 14
       - name: "npm install"
-          run: npm install
+        run: npm install
       - name: "Build .exe"
         continue-on-error: true
         run: |
