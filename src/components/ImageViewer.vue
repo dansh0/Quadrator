@@ -189,8 +189,6 @@ export default {
                 .attr('stroke', "red")
                 .attr('stroke-width', "0.5%")
 
-            this.createGrid()
-
             this.updateSamplePoints()
 
         },
@@ -202,7 +200,6 @@ export default {
             this.svgElem.selectAll().remove();
 
             // clear previous data
-            this.inputStatus.edgesNodes = [];
             this.inputStatus.nodes.length = 0;
 
             this.svgImage = this.svgElem.append('svg:image')
@@ -227,10 +224,30 @@ export default {
                 let xScale = coords[0] / self.imgElem.width;
                 let yScale = coords[1] / self.imgElem.height;
 
+                // end condition for n-poly
+                if (self.inputStatus.nodes.length > 0) {
+                    if (Math.abs(xScale - self.inputStatus.nodes[0].x) < 0.025) {
+                        if (Math.abs(yScale - self.inputStatus.nodes[0].y) < 0.025) {
+                            console.log('HOME!')
+                            // add last node as first
+                            self.inputStatus.nodes.push(self.inputStatus.nodes[0])
+
+                            // remove listener
+                            self.svgElem.on('click', null)
+
+                            self.makeCircles();
+
+                            // start sample selection
+                            self.createSamplePoints()
+                            return
+                        }
+                    }
+                }
+
                 self.inputStatus.nodes.push({x: xScale, y: yScale});
 
                 let nodeLength = self.inputStatus.nodes.length;
-                if (nodeLength == self.quadratSettings.nEdge) {
+                if (self.quadratSettings.restrictToQuad && nodeLength == 4) {
                     // add last node as first
                     self.inputStatus.nodes.push(self.inputStatus.nodes[0])
 
@@ -295,62 +312,31 @@ export default {
         createSamplePoints() {
             let self = this;
 
-            let nodes = this.inputStatus.nodes
-            nodes.forEach((node, index) => {
-                if (index != nodes.length - 1) {
-                    let line = [node, nodes[index + 1]];
-                    let edgeNodes = [];
-                    let nodeCount = index%2==0 ? self.quadratSettings.numOfSampleRows : self.quadratSettings.numOfSampleCols;
-                    let stepX = (line[1].x - line[0].x) / (nodeCount)
-                    let edgeNodesX = d3.range(line[0].x, line[1].x + stepX*0.5, stepX )
-                    let stepY = (line[1].y - line[0].y) / (nodeCount)
-                    let edgeNodesY = d3.range(line[0].y, line[1].y + stepY*0.5, stepY )
-                    console.log(edgeNodesX, edgeNodesY)
-                    edgeNodesX.forEach((edgeNodeX, index) => {
-                        edgeNodes.push({x: edgeNodeX, y: edgeNodesY[index]})
-                    })
-                    self.inputStatus.edgesNodes.push(edgeNodes)
-                }
-            })
+            // make data model points
+            let nodes = this.inputStatus.nodes;
+            let numOfSampleRows = this.quadratSettings.numOfSampleRows;
+            let numOfSampleCols = this.quadratSettings.numOfSampleCols;
+            if (this.quadratSettings.restrictToQuad) {
+                this.quadratData.randomSamplePointsRect(nodes, numOfSampleRows, numOfSampleCols)
+            } else {
+                this.quadratData.randomSamplePointsPoly(nodes)
+                // let line = d3.line()
+                // .x(d => (d.x * this.imgElem.width))
+                // .y(d => (d.y * this.imgElem.height))
+                
+                // this.quadratData.cutLines.forEach((thisLine, iter) => {
 
-            // make points
-            let samplePoints = []
-            let edgesNodes = self.inputStatus.edgesNodes
+                //     this.svgElem.append('path')
+                //         .datum(thisLine)
+                //         .attr('d', line)
+                //         .attr('fill', 'none')
+                //         .attr('stroke', "yellow")
+                //         .attr('stroke-width', "0.5%")
 
-            edgesNodes[1].forEach((edgeNodeY, yIndex) => {
-                if (yIndex != edgesNodes[1].length - 1) {
-                    edgesNodes[0].forEach((edgeNodeX, xIndex) => {
-                        if (xIndex != edgesNodes[0].length - 1) {
+                // })
+            }
 
-                            // Make an H bridge
-                            let xRand = Math.random();
-                            let xSamplePos = (xRand + xIndex) / self.quadratSettings.numOfSampleRows;
-                            let lineNodeX1 = {
-                                x: nodes[0].x + xSamplePos * (nodes[1].x - nodes[0].x),
-                                y: nodes[0].y + xSamplePos * (nodes[1].y - nodes[0].y)
-                            }
-                            let lineNodeX2 = {
-                                x: nodes[3].x + xSamplePos * (nodes[2].x - nodes[3].x),
-                                y: nodes[3].y + xSamplePos * (nodes[2].y - nodes[3].y)
-                            }
-
-                            // // Find position along bridge of H
-                            let yRand = Math.random();
-                            let ySamplePos = (yRand + yIndex) / self.quadratSettings.numOfSampleCols;
-
-                            let sampleNumber = yIndex * self.quadratSettings.numOfSampleRows + xIndex
-
-                            let samplePoint = this.quadratData.samples[sampleNumber]
-
-                            samplePoint.x = lineNodeX1.x + ySamplePos * (lineNodeX2.x - lineNodeX1.x),
-                            samplePoint.y = lineNodeX1.y + ySamplePos * (lineNodeX2.y - lineNodeX1.y),
-                            samplePoint.sampleNumber = sampleNumber
-                            
-                        }
-                    })
-                }
-            })
-
+            // update scene
             this.updateSamplePoints();
 
         },
@@ -378,40 +364,6 @@ export default {
                     })
                     .attr('fill', 'green')
 
-            this.createGrid();
-        },
-        createGrid() {
-            let self = this;
-
-            if (!self.inputStatus.edgesNodes[0]) { return } // not initialized yet
-
-            let line = d3.line()
-                .x(d => (d.x * self.imgElem.width))
-                .y(d => (d.y * self.imgElem.height))
-                
-            // self.svgElem.selectAll('path').remove();
-
-            let edgesNodes = self.inputStatus.edgesNodes
-            edgesNodes[0].forEach((node, index) => {
-                let lineNodes = [node, edgesNodes[2][edgesNodes[2].length - index - 1]]
-                self.svgElem.append('path')
-                    .datum(lineNodes)
-                    .attr('d', line)
-                    .attr('fill', 'none')
-                    .attr('stroke', "red")
-                    .attr('stroke-width', "0.25%")
-                    .style("stroke-dasharray", ("3, 3"))
-            })
-            edgesNodes[1].forEach((node, index) => {
-                let lineNodes = [node, edgesNodes[3][edgesNodes[3].length - index - 1]]
-                self.svgElem.append('path')
-                    .datum(lineNodes)
-                    .attr('d', line)
-                    .attr('fill', 'none')
-                    .attr('stroke', "red")
-                    .attr('stroke-width', "0.25%")
-                    .style("stroke-dasharray", ("3, 3"))
-            })
         },
         exportData() {
             let self = this;

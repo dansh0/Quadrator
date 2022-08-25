@@ -70,7 +70,7 @@ const store = new Vuex.Store({
         quadratSettings: {
             'numOfSampleRows': 5,
             'numOfSampleCols': 5,
-            'nEdge': 4,
+            'nEdge': 10,
         },
         inputStatus: {
             'sampleNumber': 0,
