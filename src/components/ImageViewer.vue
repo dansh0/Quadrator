@@ -23,13 +23,13 @@
                     <template v-slot:activator="{ on, attrs }">
                         <v-btn color=primary small @click="resetNodes()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Reset Nodes</v-btn>
                     </template>
-                    <span>Reset boundary polygon definition and data nodes</span>
+                    <span>Reset boundary polygon definition and data nodes for this quadrat</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
                         <v-btn color=primary small @click="exportData()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Export Data</v-btn>
                     </template>
-                    <span>Save all entered data as appended rows of a CSV file</span>
+                    <span>Save all entered data for all loaded quadrats as appended rows of a CSV file</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
@@ -514,6 +514,12 @@ export default {
 
         loadExistingQuadratSVG() {
 
+            // redirect to reset quadrat if empty (this allows listeners to reset)
+            if (this.inputStatus.nodes.length == 0) {
+                this.initNewQuadratSVG();
+                return
+            }
+
             this.svgElem = d3.select('#quadratSelector');
 
             // clear previous images
@@ -522,6 +528,7 @@ export default {
             // show image
             this.svgImage = this.svgElem.append('svg:image')
                 .attr('xlink:href', this.imgElem.src)
+
 
             // update canvas with new image
             this.updateCanvasProperties()
