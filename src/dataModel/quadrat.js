@@ -40,7 +40,6 @@ class Quadrat {
                 let edgeNodesX = range(line[0].x, line[1].x + stepX*0.5, stepX )
                 let stepY = (line[1].y - line[0].y) / (nodeCount)
                 let edgeNodesY = range(line[0].y, line[1].y + stepY*0.5, stepY )
-                console.log(edgeNodesX, edgeNodesY)
                 edgeNodesX.forEach((edgeNodeX, index) => {
                     edgeNodes.push({x: edgeNodeX, y: edgeNodesY[index]})
                 })
@@ -85,7 +84,6 @@ class Quadrat {
     }
 
     randomSamplePointsPoly(nodes) {
-        console.log('poly!')
 
         let multiplier = 1000
 
@@ -108,23 +106,19 @@ class Quadrat {
         for (let iSample=0; iSample<this.numOfSamples-1; iSample++) {
             cutRet = this.polygons[iSample].split(cutArea)
             if (cutRet.value == 1) {
-                console.log(cutRet, totalArea, cutArea)
                 this.cutLines.push([{x:cutRet.cutLine.start.x/multiplier, y:cutRet.cutLine.start.y/multiplier}, {x:cutRet.cutLine.end.x/multiplier, y:cutRet.cutLine.end.y/multiplier}])
                 let size1 = cutRet.poly1.countSquare()
                 let size2 = cutRet.poly2.countSquare()
                 if (size1 < size2) {
                     this.polygons[iSample] = cutRet.poly1
                     this.polygons.push(cutRet.poly2)
-                    console.log(cutRet.poly1.countSquare())
                 } else {
                     this.polygons[iSample] = cutRet.poly2
                     this.polygons.push(cutRet.poly1)
-                    console.log(cutRet.poly2.countSquare())
                 }
             } else {
                 console.error('Cut Failed')
                 ipcRenderer.invoke('alert', "Could not complete polygon processing. Try loading image again");
-                console.log(this.polygons)
                 return
             }
         }
@@ -195,7 +189,6 @@ class Quadrat {
                     let codeIndex = speciesList.map(spec => spec.code).indexOf(code)
                     let codeSpecies = speciesList[codeIndex].species;
                     let codeGroup = speciesList[codeIndex].group1 + ' - ' + speciesList[codeIndex].group2;
-                    console.log(codeGroup)
                     // init at count of 1
                     codes[code] = {count: 1, species: codeSpecies, group: codeGroup}
                 }

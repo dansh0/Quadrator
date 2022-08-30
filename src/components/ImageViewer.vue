@@ -137,7 +137,6 @@ export default {
 
         this.initImgElem()
 
-        // this.loadNewImage("C:\\Users\\dan\\Documents\\Fortify\\quadrator\\images\\fish.jpg") // TEMP
     },
     methods: {
         ...mapMutations([
@@ -147,27 +146,14 @@ export default {
             'RESET_ALL',
             'UPDATE_RUNNING_DATA'
         ]),
-        alert(alertString) {
-            ipcRenderer.invoke('alert', alertString);
-        },
+        
 
-        async fullReset() {
-
-            let questionInfo = {
-                title: "Confirm Full Reset",
-                question: "Are you sure you want to delete all unsaved progress and start over?",
-                buttons: ["No", "Yes"]
-            };
-            let confirmation = await ipcRenderer.invoke('question', questionInfo);
-            if (!confirmation.response) { return }
-            console.log(confirmation);
-                
-            this.RESET_ALL();
-        },
+        // ----
+        // INIT
+        // ----
 
         initImgElem() {
 
-            console.log('here')
             // this.imgElem = document.createElement('img');
             // this.imgElem.height = this.windowHelpers.height - 200;
             this.imgElem.style.position = "absolute";
@@ -207,7 +193,25 @@ export default {
             })
 
         },
-        
+
+
+        // --------------------
+        // TOP BUTTON FUNCTIONS
+        // --------------------
+
+        async fullReset() {
+
+            let questionInfo = {
+                title: "Confirm Full Reset",
+                question: "Are you sure you want to delete all unsaved progress and start over?",
+                buttons: ["No", "Yes"]
+            };
+            let confirmation = await ipcRenderer.invoke('question', questionInfo);
+            if (!confirmation.response) { return }
+                
+            this.RESET_ALL();
+        },
+
         async selectImage() {
             let filePaths = await ipcRenderer.invoke('openFile')
             
@@ -220,35 +224,75 @@ export default {
             })
 
             // load image if one is defined
-            console.log(filePaths)
+            console.log("File Paths:", filePaths)
             this.loadNewImage(filePaths[0]);
             
         },
-        
-        loadNewImage(filePath) {
-            // remove listeners
-            d3.select('#quadratSelector').on('click', null);
-            d3.select('#quadratSelector').on('mousemove', null);
 
-            // update data
-            this.CHANGE_IMG_SRC(filePath);
-            this.NEW_QUADRAT();
+        async resetNodes() {
+            if (this.inputStatus.nodes.length > 0) {
+                let questionInfo = {
+                    title: "Confirm Node Reset",
+                    question: "Are you sure you want to reset your node selections?",
+                    buttons: ["No", "Yes"]
+                };
+                let confirmation = await ipcRenderer.invoke('question', questionInfo);
+                if (!confirmation.response) { return }
+            }
 
-            this.newImage = true;
-            this.imgElem.src = this.imgSrc;
+            // if all good then init new one
+            this.initNewQuadratSVG()
+        },
+
+        async exportData() {
+
+            // update running data list
+            this.UPDATE_RUNNING_DATA();
+
+            let filePath = await ipcRenderer.invoke('appendFile');
+
+            // quit if file select was canceled
+            if (!filePath.filePath) { return }
+
+            console.log("Export Path:", filePath.filePath)
+            
+            // build csv text
+            let dataOutput = ""
+            this.runningData.forEach(image => {
+                dataOutput += image.quadratData.toCSV(this.buttons);
+            })
+            // dataOutput = this.quadratData.toCSV(this.buttons)
+            if (fs.existsSync(filePath.filePath)) {
+                fs.appendFile(filePath.filePath, dataOutput, function (err) {
+                    if (err) {
+                        this.alert("Append/Save Failed. Make sure your file is not open in other programs")
+                        throw err;
+                    }
+                    console.log('Data Exported!');
+                });
+            } else {
+                let outputWithHeader = "Quadrat Title,Image Path,ID Date,Species Code,Species,Group Name,Species Count,Species Coverage %\n" + dataOutput; 
+                fs.writeFile(filePath.filePath, outputWithHeader, function (err) {
+                    if (err) throw err;
+                    console.log('Data Exported!');
+                });
+            }
 
         },
 
-        loadExistingImage(filePath) {
-            // remove listeners
-            d3.select('#quadratSelector').on('click', null);
-            d3.select('#quadratSelector').on('mousemove', null);
+        previousImage() {
+            let currentImgIndex = this.imgPathList.indexOf(this.quadratData.imgSrc);
 
-            // update only the image src
-            this.CHANGE_IMG_SRC(filePath);
-            this.newImage = false;
-            this.imgElem.src = this.imgSrc;
+            // do nothing if first image
+            if (currentImgIndex == 0) { return }
 
+            // update running data list
+            this.UPDATE_RUNNING_DATA();
+
+            // load next quadrat
+            this.SWAP_QUADRAT(this.runningData[currentImgIndex-1]);
+            this.loadExistingImage(this.imgPathList[currentImgIndex-1]);
+            
         },
 
         nextImage() {
@@ -269,204 +313,12 @@ export default {
             }
         },
 
-        previousImage() {
-            let currentImgIndex = this.imgPathList.indexOf(this.quadratData.imgSrc);
 
-            // do nothing if first image
-            if (currentImgIndex == 0) { return }
+        // ---------
+        // SVG TOOLS
+        // ---------
 
-            // update running data list
-            this.UPDATE_RUNNING_DATA();
-
-            // load next quadrat
-            this.SWAP_QUADRAT(this.runningData[currentImgIndex-1]);
-            this.loadExistingImage(this.imgPathList[currentImgIndex-1]);
-            
-        },
-
-        makeCircles() {
-
-            this.svgElem.selectAll('circle').remove();
-
-            this.svgElem.selectAll('nodeCircle')
-                .data(this.inputStatus.nodes).enter()
-                .append('circle')
-                    .attr('class', 'nodeCircle')
-                    .attr('cx', data => data.x * this.imgElem.width)
-                    .attr('cy', data => data.y * this.imgElem.height)
-                    .attr('r', "1%")
-                    .attr('fill', 'red')
-
-            let line = d3.line()
-                .x(d => (d.x * this.imgElem.width))
-                .y(d => (d.y * this.imgElem.height))
-                
-            this.svgElem.selectAll('path').remove();
-
-            this.svgElem.append('path')
-                .datum(this.inputStatus.nodes)
-                .attr('d', line)
-                .attr('fill', 'none')
-                .attr('stroke', "red")
-                .attr('stroke-width', "0.5%")
-
-            this.updateSamplePoints()
-
-        },
-        initNewQuadratSVG() {
-
-            this.svgElem = d3.select('#quadratSelector');
-
-            // clear previous images
-            this.svgElem.selectAll().remove();
-
-            // clear previous data
-            this.inputStatus.nodes.length = 0;
-
-            this.svgImage = this.svgElem.append('svg:image')
-                .attr('xlink:href', this.imgElem.src)
-
-            if (this.quadratData.samples) {
-                this.quadratData.resetSamples();
-            }
-
-            // update canvas with new image
-            this.updateCanvasProperties()
-
-            // clear previous shapes
-            this.makeCircles();
-
-            let self = this
-            this.svgElem.on('click', function(event) {
-
-                let coords = d3.pointer(event);
-                console.log(coords)
-
-                let xScale = coords[0] / self.imgElem.width;
-                let yScale = coords[1] / self.imgElem.height;
-
-                // end condition for n-poly
-                if (self.inputStatus.nodes.length > 0 && !self.quadratSettings.restrictToQuad) {
-                    if (Math.abs(xScale - self.inputStatus.nodes[0].x) < 0.025) {
-                        if (Math.abs(yScale - self.inputStatus.nodes[0].y) < 0.025) {
-
-                            // add last node as first
-                            self.inputStatus.nodes.push(self.inputStatus.nodes[0])
-
-                            // remove listener
-                            self.svgElem.on('click', null);
-                            self.svgElem.on('mousemove', null);
-                            document.body.style.cursor = 'default';
-
-                            self.makeCircles();
-
-                            // start sample selection
-                            self.createSamplePoints()
-                            return
-                        }
-                    }
-                }
-
-
-                self.inputStatus.nodes.push({x: xScale, y: yScale});
-                
-                // add cursor action if it's the first
-                if (self.inputStatus.nodes.length == 1 && !self.quadratSettings.restrictToQuad) {
-
-                    self.svgElem.on('mousemove', self._cursorCompletePoly);
-
-                }
-
-                let nodeLength = self.inputStatus.nodes.length;
-                if (self.quadratSettings.restrictToQuad && nodeLength == 4) {
-                    // add last node as first
-                    self.inputStatus.nodes.push(self.inputStatus.nodes[0])
-
-                    // remove listener
-                    self.svgElem.on('click', null);
-                    self.svgElem.on('mousemove', null);
-
-                    self.makeCircles();
-
-                    // start sample selection
-                    self.createSamplePoints()
-                } else {
-
-                    self.makeCircles();
-                }
-
-
-            })
-
-            // this.testDraw()
-
-
-        },
-
-        loadExistingQuadratSVG() {
-
-            this.svgElem = d3.select('#quadratSelector');
-
-            // clear previous images
-            this.svgElem.selectAll().remove();
-
-            // show image
-            this.svgImage = this.svgElem.append('svg:image')
-                .attr('xlink:href', this.imgElem.src)
-
-            // update canvas with new image
-            this.updateCanvasProperties()
-
-            // clear previous shapes
-            this.makeCircles();
-
-        },
-
-        _cursorCompletePoly(subEvent) { 
-            let subCoords = d3.pointer(subEvent);
-
-            let xSubScale = subCoords[0] / this.imgElem.width;
-            let ySubScale = subCoords[1] / this.imgElem.height;
-
-            if (Math.abs(xSubScale - this.inputStatus.nodes[0].x) < 0.025) {
-                if (Math.abs(ySubScale - this.inputStatus.nodes[0].y) < 0.025) {
-                    document.body.style.cursor = 'crosshair'; 
-                } else {
-                    document.body.style.cursor = 'default';
-                }
-            } else {
-                document.body.style.cursor = 'default';
-            }
-        },
-
-        async resetNodes() {
-            if (this.inputStatus.nodes.length > 0) {
-                let questionInfo = {
-                    title: "Confirm Node Reset",
-                    question: "Are you sure you want to reset your node selections?",
-                    buttons: ["No", "Yes"]
-                };
-                let confirmation = await ipcRenderer.invoke('question', questionInfo);
-                console.log(confirmation);
-                if (!confirmation.response) { return }
-            }
-
-            // if all good then init new one
-            this.initNewQuadratSVG()
-        },
         updateCanvasProperties() {
-            // get canvas tag
-            // this.svgElem = document.getElementById('quadratSelector');
-            
-
-            // update canvas
-            // this.svgElem.width = this.imgElem.width;
-            // this.svgElem.height = this.imgElem.height;
-
-
-
-            // let ctx = this.svgElem.getContext('2d');
-            // ctx.drawImage(this.imgElem, 0, 0, this.imgElem.width, this.imgElem.height);
             
             // update canvas size
             this.svgElem.style('width', this.imgElem.width);
@@ -480,16 +332,7 @@ export default {
             this.makeCircles()
 
         },
-        testDraw() {
-            let svg = d3.select('#quadratSelector');
 
-            svg.append("circle")
-                .style("stroke", "gray")
-                .style("fill", "black")
-                .attr("r", 40)
-                .attr("cx", 50)
-                .attr("cy", 20);
-        },
         createSamplePoints() {
             let self = this;
 
@@ -549,41 +392,202 @@ export default {
 
         },
 
-        async exportData() {
+        makeCircles() {
 
-            // update running data list
-            this.UPDATE_RUNNING_DATA();
+            this.svgElem.selectAll('circle').remove();
 
-            let filePath = await ipcRenderer.invoke('appendFile');
+            this.svgElem.selectAll('nodeCircle')
+                .data(this.inputStatus.nodes).enter()
+                .append('circle')
+                    .attr('class', 'nodeCircle')
+                    .attr('cx', data => data.x * this.imgElem.width)
+                    .attr('cy', data => data.y * this.imgElem.height)
+                    .attr('r', "1%")
+                    .attr('fill', 'red')
 
-            // quit if file select was canceled
-            if (!filePath.filePath) { return }
+            let line = d3.line()
+                .x(d => (d.x * this.imgElem.width))
+                .y(d => (d.y * this.imgElem.height))
+                
+            this.svgElem.selectAll('path').remove();
 
-            console.log(filePath.filePath)
-            
-            // build csv text
-            let dataOutput = ""
-            this.runningData.forEach(image => {
-                dataOutput += image.quadratData.toCSV(this.buttons);
-            })
-            // dataOutput = this.quadratData.toCSV(this.buttons)
-            if (fs.existsSync(filePath.filePath)) {
-                fs.appendFile(filePath.filePath, dataOutput, function (err) {
-                    if (err) {
-                        this.alert("Append/Save Failed. Make sure your file is not open in other programs")
-                        throw err;
-                    }
-                    console.log('Saved!');
-                });
-            } else {
-                let outputWithHeader = "Quadrat Title,Image Path,ID Date,Species Code,Species,Group Name,Species Count,Species Coverage %\n" + dataOutput; 
-                fs.writeFile(filePath.filePath, outputWithHeader, function (err) {
-                    if (err) throw err;
-                    console.log('Saved!');
-                });
+            this.svgElem.append('path')
+                .datum(this.inputStatus.nodes)
+                .attr('d', line)
+                .attr('fill', 'none')
+                .attr('stroke', "red")
+                .attr('stroke-width', "0.5%")
+
+            this.updateSamplePoints()
+
+        },
+
+
+        // -----------------        
+        // QUADRAT UTILITIES
+        // -----------------
+
+        initNewQuadratSVG() {
+
+            this.svgElem = d3.select('#quadratSelector');
+
+            // clear previous images
+            this.svgElem.selectAll().remove();
+
+            // clear previous data
+            this.inputStatus.nodes.length = 0;
+
+            this.svgImage = this.svgElem.append('svg:image')
+                .attr('xlink:href', this.imgElem.src)
+
+            if (this.quadratData.samples) {
+                this.quadratData.resetSamples();
             }
 
-        }
+            // update canvas with new image
+            this.updateCanvasProperties()
+
+            // clear previous shapes
+            this.makeCircles();
+
+            let self = this
+            this.svgElem.on('click', function(event) {
+
+                let coords = d3.pointer(event);
+
+                let xScale = coords[0] / self.imgElem.width;
+                let yScale = coords[1] / self.imgElem.height;
+
+                // end condition for n-poly
+                if (self.inputStatus.nodes.length > 0 && !self.quadratSettings.restrictToQuad) {
+                    if (Math.abs(xScale - self.inputStatus.nodes[0].x) < 0.025) {
+                        if (Math.abs(yScale - self.inputStatus.nodes[0].y) < 0.025) {
+
+                            // add last node as first
+                            self.inputStatus.nodes.push(self.inputStatus.nodes[0])
+
+                            // remove listener
+                            self.svgElem.on('click', null);
+                            self.svgElem.on('mousemove', null);
+                            document.body.style.cursor = 'default';
+
+                            self.makeCircles();
+
+                            // start sample selection
+                            self.createSamplePoints()
+                            return
+                        }
+                    }
+                }
+
+
+                self.inputStatus.nodes.push({x: xScale, y: yScale});
+                
+                // add cursor action if it's the first
+                if (self.inputStatus.nodes.length == 1 && !self.quadratSettings.restrictToQuad) {
+
+                    self.svgElem.on('mousemove', self._cursorCompletePoly);
+
+                }
+
+                let nodeLength = self.inputStatus.nodes.length;
+                if (self.quadratSettings.restrictToQuad && nodeLength == 4) {
+                    // add last node as first
+                    self.inputStatus.nodes.push(self.inputStatus.nodes[0])
+
+                    // remove listener
+                    self.svgElem.on('click', null);
+                    self.svgElem.on('mousemove', null);
+
+                    self.makeCircles();
+
+                    // start sample selection
+                    self.createSamplePoints()
+                } else {
+
+                    self.makeCircles();
+                }
+
+            })
+
+        },
+
+        loadExistingQuadratSVG() {
+
+            this.svgElem = d3.select('#quadratSelector');
+
+            // clear previous images
+            this.svgElem.selectAll().remove();
+
+            // show image
+            this.svgImage = this.svgElem.append('svg:image')
+                .attr('xlink:href', this.imgElem.src)
+
+            // update canvas with new image
+            this.updateCanvasProperties()
+
+            // clear previous shapes
+            this.makeCircles();
+
+        },
+
+        _cursorCompletePoly(subEvent) { 
+            let subCoords = d3.pointer(subEvent);
+
+            let xSubScale = subCoords[0] / this.imgElem.width;
+            let ySubScale = subCoords[1] / this.imgElem.height;
+
+            if (Math.abs(xSubScale - this.inputStatus.nodes[0].x) < 0.025) {
+                if (Math.abs(ySubScale - this.inputStatus.nodes[0].y) < 0.025) {
+                    document.body.style.cursor = 'crosshair'; 
+                } else {
+                    document.body.style.cursor = 'default';
+                }
+            } else {
+                document.body.style.cursor = 'default';
+            }
+        },
+
+
+        // -----------
+        // SAVE & LOAD
+        // -----------
+
+        loadNewImage(filePath) {
+            // remove listeners
+            d3.select('#quadratSelector').on('click', null);
+            d3.select('#quadratSelector').on('mousemove', null);
+
+            // update data
+            this.CHANGE_IMG_SRC(filePath);
+            this.NEW_QUADRAT();
+
+            this.newImage = true;
+            this.imgElem.src = this.imgSrc;
+
+        },
+
+        loadExistingImage(filePath) {
+            // remove listeners
+            d3.select('#quadratSelector').on('click', null);
+            d3.select('#quadratSelector').on('mousemove', null);
+
+            // update only the image src
+            this.CHANGE_IMG_SRC(filePath);
+            this.newImage = false;
+            this.imgElem.src = this.imgSrc;
+
+        },
+
+
+        // ---------------
+        // OTHER UTILITIES
+        // ---------------
+
+        alert(alertString) {
+            ipcRenderer.invoke('alert', alertString);
+        },
+
     }
 }
 </script>

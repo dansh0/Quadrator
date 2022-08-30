@@ -100,9 +100,9 @@ export default {
         }
     },
     watch: {
-        'toggles': function() {
-            console.log(this.selectedButtons)
-        }, 
+        // 'toggles': function() {
+        //     console.log(this.selectedButtons)
+        // }, 
         'selectedSamples': function() {
             this.updateToggles();
         }
@@ -136,7 +136,6 @@ export default {
             // update button selections
             this.updateToggles();
 
-            console.log('NEXT')
         },
         prevSample() {
 
@@ -148,7 +147,6 @@ export default {
 
             }
             
-            console.log('PREV');
         },
         enableHotKeys() {
             if (this.hotKeySwitch) {

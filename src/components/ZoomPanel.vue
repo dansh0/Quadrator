@@ -49,9 +49,9 @@ export default {
         },
     },
     watch: {
-        'imageAspect': function() {
-            console.log(this.imgElem)
-        },
+        // 'imageAspect': function() {
+        //     console.log(this.imgElem)
+        // },
         'sampleCoords': function() {
             
             this.updateZoom();
@@ -63,7 +63,7 @@ export default {
             // new image is loaded, update
 
             // get aspect of input image
-            console.log(this.imageAspect)
+            console.log("Image Aspect Ratio:", this.imageAspect)
 
             d3.select('#svgImage')
                 .attr('xlink:href', this.imgElem.src)
@@ -117,7 +117,7 @@ export default {
             let currentIndex = this.zoomWidthOptions.indexOf(this.zoomWidth);
             let newIndex = (currentIndex + 1) % (this.zoomWidthOptions.length) // wraps
             this.zoomWidth = this.zoomWidthOptions[newIndex]
-            console.log(this.zoomWidth)
+            // console.log(this.zoomWidth)
             this.updateZoom()
 
         },
