@@ -46,7 +46,7 @@ async function createWindow() {
         // select file
         let filePath = await dialog.showOpenDialog(win, {properties: ['openFile', 'multiSelections']})
 
-        return filePath.filePaths[0]
+        return filePath.filePaths
     });
 
     // Selects a save file location from native dialog on request by renderer process
@@ -61,8 +61,23 @@ async function createWindow() {
     // Pops up an alert
     ipcMain.handle('alert', (event, alertString) => {
         
-        // select file
+        // alert user
         dialog.showMessageBox(win, {message: alertString, type: 'error', title: 'Alert'})
+
+    });
+
+    // Pops up an question
+    ipcMain.handle('question', async (event, questionInfo) => {
+        
+        // ask question
+        let response = await dialog.showMessageBox(win, {
+            message: questionInfo.question, 
+            type: 'question', 
+            title: questionInfo.title,
+            buttons: questionInfo.buttons
+        })
+
+        return response
 
     });
 }

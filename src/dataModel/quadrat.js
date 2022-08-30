@@ -131,16 +131,16 @@ class Quadrat {
 
         // assign a point to each polygon
         this.polygons.forEach((poly, pCount) => {
-            // test
+
+            // get bbox
             poly.bbox = this._getPolygonBBox(poly);
-            // let xCenter = (poly.bbox.min.x + 0.5 * (poly.bbox.max.x - poly.bbox.min.x)) / multiplier;
-            // let yCenter = (poly.bbox.min.y + 0.5 * (poly.bbox.max.y - poly.bbox.min.y)) / multiplier;
-            // let center = new Vector(xCenter*multiplier, yCenter*multiplier, 0)
+           
+            // test if a random point is inside the poly, repeat randomizer if not
             let inside = false
             let failTry = 0
             let xPoint, yPoint;
             while (!inside) {
-                if (failTry > 999) {
+                if (failTry > 999) { //max 999 guesses, usually on takes a few max
                     console.error('Could not find a point for sample');
                     ipcRenderer.invoke('alert', "Could not complete polygon processing. Try loading image again");
                     return
@@ -151,6 +151,7 @@ class Quadrat {
                 failTry++;
             }
 
+            // assign random point to sample pool
             this.samples[pCount].x = xPoint / multiplier;
             this.samples[pCount].y = yPoint / multiplier;
             this.samples[pCount].sampleNumber = pCount;
