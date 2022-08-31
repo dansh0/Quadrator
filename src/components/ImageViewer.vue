@@ -209,7 +209,8 @@ export default {
             let confirmation = await ipcRenderer.invoke('question', questionInfo);
             if (!confirmation.response) { return }
                 
-            this.RESET_ALL();
+            ipcRenderer.invoke('reload')
+            // this.RESET_ALL();
         },
 
         async selectImage() {

@@ -116,13 +116,13 @@ const store = new Vuex.Store({
         CHANGE_IMG_SRC (state, imagePath) {
             state.imgSrc = imagePath;
         },
-        RESET_ALL(state) {
-            // TODO: pull out all preferences from default state into preference file to avoid overwriting
-            let defaultClone = _.cloneDeep(defaultState)
-            Object.keys(state).forEach(attrName => {
-                state[attrName] = defaultClone[attrName];
-            });
-        }
+        // RESET_ALL(state) {
+        //     // TODO: pull out all preferences from default state into preference file to avoid overwriting
+        //     let defaultClone = _.cloneDeep(defaultState)
+        //     Object.keys(state).forEach(attrName => {
+        //         state[attrName] = defaultClone[attrName];
+        //     });
+        // }
     },
     getters: {
 

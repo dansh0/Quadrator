@@ -80,6 +80,12 @@ async function createWindow() {
         return response
 
     });
+
+    // Reloads the renderer, starting from scratch
+    ipcMain.handle('reload', (event) => {
+        win.webContents.reload();
+    });
+    
 }
 
 // Quit when all windows are closed.

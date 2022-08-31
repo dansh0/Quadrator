@@ -54,6 +54,14 @@ export default {
             this.updatePanelSize();
             
         })
+        window.addEventListener('maximize', () => {
+            this.updatePanelSize();
+            
+        })
+        window.addEventListener('unmaximize', () => {
+            this.updatePanelSize();
+            
+        })
     },
     computed:{
         ...mapState([
