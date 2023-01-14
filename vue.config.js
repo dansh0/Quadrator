@@ -11,7 +11,13 @@ module.exports = {
     ],
     pluginOptions: {
         electronBuilder: {
-            nodeIntegration: true
+            nodeIntegration: true,
+            builderOptions: {
+                "extraResources": [{
+                    "from": "./src/assets/buttons.csv",
+                    "to": "./buttons.csv"
+                }]
+            }
         }
     },
 }

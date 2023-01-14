@@ -29,6 +29,11 @@ async function createWindow() {
             webSecurity: false
         }
     })
+    
+    // Returns the userdirectory
+    ipcMain.handle('askUserDir', async (event) => {
+        return app.getPath('userData');
+    });
 
     if (process.env.WEBPACK_DEV_SERVER_URL) {
         // Load the url of the dev server if in development mode
@@ -85,6 +90,7 @@ async function createWindow() {
     ipcMain.handle('reload', (event) => {
         win.webContents.reload();
     });
+
     
 }
 

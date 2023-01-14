@@ -1,0 +1,26 @@
+code,species,group1,group2,color,colorSelected
+Anem,Anthopleura_sp,Animal,Intertidal sessile,#9c27b0,#7c1790
+Barn,Cirripedia_spp,Animal,Intertidal sessile,#9c27b0,#7c1791
+Asc,Polycarpa sp.,Animal,Intertidal sessile,#9c27b0,#7c1792
+Spon,Haliclona sp.,Animal,Intertidal sessile,#9c27b0,#7c1793
+Oys,Saccostrea scyphophilla,Animal,Intertidal sessile,#9c27b0,#7c1794
+Colo,Other colonial,Animal,Intertidal sessile,#9c27b0,#7c1795
+Tube,Tubeworm,Animal,Intertidal sessile,#9c27b0,#7c1796
+Eggs,Snail eggs,Animal,Intertidal sessile,#9c27b0,#7c1797
+Cyan,Cyanobacteria,Film,Algae,#00bcd4,#00acc4
+Sarg,Sargassum spp. ,Brown,Algae,#795548,#694538
+Pad,Padina,Brown,Algae,#795548,#694538
+Lob,Lobophora variegata,Brown,Algae,#795548,#694538
+Neo,Neomeris sp.,Green,Algae,#00c853,#00a833
+Bry,Bryopsis sp.,Green,Algae,#00c853,#00a833
+Chae,Chaetomorpha antennina,Green,Algae,#00c853,#00a833
+Caul,Caulerpa verticillata,Green,Algae,#00c853,#00a833
+Hyp,Hypnea caespitosa/pannosa,Red,Algae,#f44336,#c43326
+Pey,Peysonnelia rubra,Encrusting,Algae,#2196f3,#1576dd
+Ralf,Ralfsiales/Neoralfsiacae,Encrusting,Algae,#2196f3,#1576dd
+Cor,Corralina,Encrusting,Algae,#2196f3,#1576dd
+Hydr,Hydrolithon farinosum,Encrusting,Algae,#2196f3,#1576dd
+EAM,EAM,Turf,Algae,#ffeb3b,#ddcb2b
+?,Unknown,Other,Other,#9e9e9e,#7e7e7e
+Sed,Sediment,Other,Other,#9e9e9e,#7e7e7e
+Bare,Bare space,Other,Other,#9e9e9e,#7e7e7e
