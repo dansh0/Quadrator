@@ -2,6 +2,7 @@ const vuetify = require('./plugins/vuetify').default;
 import { store } from './store.js'
 import App from './App.vue'
 import Vue from 'vue'
+import {version} from '../package.json';
 const { ipcRenderer } = require('electron');
 const path = require('path')
 const fs = require('fs')
@@ -9,6 +10,7 @@ const csv = require('csv-parser')
 
 // import vuetify from './plugins/vuetify.js'
 
+console.log("Version:", version)
 console.log(vuetify)
 console.log(store)
 
