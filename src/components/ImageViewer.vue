@@ -1,10 +1,45 @@
 <template>
     <v-card :style="{'width':panelWidth, 'height':panelHeight}" color=tertiary>
-        <v-container v-if="!imgSrc" fill-height grid-list-md text-xs-center>
-            <v-row class="mx-3 justify-center">
-                <v-btn color=primary x-large @click="selectImage()">Load Image</v-btn>
-            </v-row>
-        </v-container>
+        <div v-if="!imgSrc" class="background-container" :style="backgroundStyle">
+            <v-container fill-height grid-list-md text-xs-center>
+                <v-row class="fill-height">
+                    <v-col cols="12" class="d-flex flex-column">
+                        <v-row class="flex-grow-0" style="height: 40%">
+                            <v-col cols="12" class="d-flex align-center justify-center">
+                                <img src="@/assets/Title.png" alt="Quadrator" class="homeTitle">
+                            </v-col>
+                        </v-row>
+                        <v-row class="flex-grow-0">
+                            <v-col cols="12" class="d-flex align-center justify-center">
+                                <v-card class="pa-1 elevation-9" color=tertiary max-width="500">
+                                    <v-card-text class="text-center">
+                                        <!-- <p class="text-body-1 mb-4">
+                                            TODO: Add info here
+                                        </p> -->
+                                        <v-col class="d-flex flex-column align-center">
+                                            <v-btn color="primary" x-large @click="selectImage()" class="elevation-6 mb-4">
+                                                <v-icon left>mdi-image-plus</v-icon>
+                                                Load Image
+                                            </v-btn>
+                                            <v-btn color="primary" medium @click="setButtons()" class="elevation-6 mb-4">
+                                                <v-icon left>mdi-cog</v-icon>
+                                                Set Buttons
+                                            </v-btn>
+                                        </v-col>
+                                        <p class="text-caption grey--text mb-1 mt-5">
+                                            Beta Release {{ appVersion ? `v${appVersion}` : '' }}
+                                        </p>
+                                        <p class="text-caption grey--text mb-0">
+                                            © 2025 Shores Design. All rights reserved.
+                                        </p>
+                                    </v-card-text>
+                                </v-card>
+                            </v-col>
+                        </v-row>
+                    </v-col>
+                </v-row>
+            </v-container>
+        </div>
         <v-container v-if="imgSrc" grid-list-md text-xs-center>
             <v-row class="mr-3 mb-3 justify-center">
                 <v-tooltip bottom>
@@ -18,6 +53,12 @@
                         <v-btn color=primary small @click="selectImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Load Image</v-btn>
                     </template>
                     <span>Load one or multiple images to add to this image group</span>
+                </v-tooltip>
+                <v-tooltip bottom>
+                    <template v-slot:activator="{ on, attrs }">
+                        <v-btn color="primary" small @click="setButtons()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Set Buttons</v-btn>
+                    </template>
+                    <span>Set the buttons for the image group</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
@@ -57,6 +98,7 @@
 import { mapState, mapMutations } from 'vuex';
 import * as d3 from 'd3';
 const { ipcRenderer } = require('electron');
+const { version } = require('../../package.json');
 const fs = require('fs');
 
 export default {
@@ -82,8 +124,10 @@ export default {
             'inputStatus',
             'buttons'
         ]),
+        appVersion: function() {
+            return version
+        },
         panelWidth: function() {
-
             return this.windowHelpers.leftPanelWidth + 'px'
         },
         panelHeight: function() {
@@ -101,7 +145,20 @@ export default {
         },
         numOfSamples: function() {
             return this.quadratSettings.numOfSampleRows * this.quadratSettings.numOfSampleCols
-        }
+        },
+        backgroundStyle() {
+            return {
+                backgroundImage: `url(${require('@/assets/images/pexels-pok-rie-33563-1031200.jpg')})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 0
+            }
+        },
     },
     watch: {
         panelHeight: function() {
@@ -596,12 +653,70 @@ export default {
             ipcRenderer.invoke('alert', alertString);
         },
 
+        async setButtons() {
+            // Request CSV file selection
+            let filePath = await ipcRenderer.invoke('openFile', {
+                filters: [
+                    { name: 'CSV Files', extensions: ['csv'] }
+                ]
+            });
+            
+            // If no file selected, return
+            if (!filePath || filePath.length === 0) return;
+            
+            // Clear existing buttons
+            this.buttons.length = 0;
+            
+            // Read and process the CSV file
+            const csv = require('csv-parser');
+            const fs = require('fs');
+            
+            fs.createReadStream(filePath[0])
+                .pipe(csv())
+                .on('data', (data) => this.buttons.push(data))
+                .on('end', () => {
+                    console.log('CSV file successfully processed');
+                })
+                .on('error', (error) => {
+                    console.error('Error processing CSV:', error);
+                    this.alert('Error processing CSV file. Please try again.');
+                });
+        },
+
     }
 }
 </script>
 
 <!-- Add "scoped" attribute to limit CSS to this component only -->
 <style lang="scss" scoped>
+.background-container {
+    position: relative;
+}
 
+.title-block {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 2rem;
+    border-radius: 8px;
+    backdrop-filter: blur(5px);
+}
 
+.homeTitle {
+    max-width: 80%;
+    height: auto;
+}
+
+.v-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.v-container {
+    position: relative;
+    z-index: 1;
+}
 </style>

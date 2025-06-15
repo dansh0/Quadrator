@@ -1,7 +1,7 @@
 <template>
     <v-card :style="{'width':panelWidth}" color=tertiary max-height=200 height="100%" >
         <v-container v-if="imgElem.src" fluid class="pa-0">
-            <v-row class="mx-2 py-2 justify-center">
+            <v-row class="mx-0 py-0 justify-center">
                 <svg id="zoomImage" width="100%" height="100%"/>
             </v-row>
         </v-container>

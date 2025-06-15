@@ -16,21 +16,21 @@ console.log(store)
 
 // import csv of button options
 const results = [];
-ipcRenderer.invoke('askUserDir')
-    .then((userDir) => {
-        console.log(userDir)
-        const csvFile = path.join(__dirname, '..', 'buttons.csv');
-        console.log(csvFile)
-        fs.createReadStream(csvFile)
-          .pipe(csv())
-          .on('data', (data) => store.state.buttons.push(data))
-          // .on('end', () => {
-          //   console.log(store.state.buttons);
-          // });
-    })
-    .catch((error) => {
-        console.error(error);
-    });
+// ipcRenderer.invoke('askUserDir')
+//     .then((userDir) => {
+//         console.log(userDir)
+//         const csvFile = path.join(userDir, 'buttons.csv');
+//         console.log(csvFile)
+//         fs.createReadStream(csvFile)
+//           .pipe(csv())
+//           .on('data', (data) => store.state.buttons.push(data))
+//           // .on('end', () => {
+//           //   console.log(store.state.buttons);
+//           // });
+//     })
+//     .catch((error) => {
+//         console.error(error);
+//     });
 
 
 // const { store } = require('./store.js').store;
