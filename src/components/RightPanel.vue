@@ -6,7 +6,7 @@
             Select Species ID
         </v-card-title> -->
         <v-container v-if="this.buttons.length==0" class="d-flex justify-center">
-            <v-btn x-large color=primary @click="handleSetButtons">Set Buttons</v-btn>
+            <v-btn x-large color=primary @click="handleSetButtons">Edit Buttons</v-btn>
         </v-container>
         <v-btn-toggle multiple background-color=tertiary @change="updateSamples()" v-model="toggles">
             <v-container grid-list-md>

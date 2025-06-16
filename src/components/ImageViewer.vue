@@ -17,13 +17,9 @@
                                             TODO: Add info here
                                         </p> -->
                                         <v-col class="d-flex flex-column align-center">
-                                            <v-btn color="primary" x-large @click="selectImage()" class="elevation-6 mb-4">
+                                            <v-btn color="primary" x-large @click="selectImage()" class="elevation-6">
                                                 <v-icon left>mdi-image-plus</v-icon>
                                                 Load Image
-                                            </v-btn>
-                                            <v-btn color="primary" medium @click="setButtons()" class="elevation-6 mb-4">
-                                                <v-icon left>mdi-cog</v-icon>
-                                                Set Buttons
                                             </v-btn>
                                         </v-col>
                                         <p class="text-caption grey--text mb-1 mt-5">
@@ -56,9 +52,9 @@
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
-                        <v-btn color="primary" small @click="setButtons()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Set Buttons</v-btn>
+                        <v-btn color="primary" small @click="setButtons()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Edit Buttons</v-btn>
                     </template>
-                    <span>Set the buttons for the image group</span>
+                    <span>Edit the buttons for the image group</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
@@ -399,13 +395,13 @@ export default {
             let nodes = this.inputStatus.nodes;
             let numOfSampleRows = this.quadratSettings.numOfSampleRows;
             let numOfSampleCols = this.quadratSettings.numOfSampleCols;
-            if (this.quadratSettings.restrictToQuad) {
+            if (this.quadratSettings.restrictToQuad || nodes.length == 5) {
                 this.quadratData.randomSamplePointsRect(nodes, numOfSampleRows, numOfSampleCols)
             } else {
                 this.quadratData.randomSamplePointsPoly(nodes)
                 // let line = d3.line()
-                // .x(d => (d.x * this.imgElem.width))
-                // .y(d => (d.y * this.imgElem.height))
+                //     .x(d => (d.x * this.imgElem.width))
+                //     .y(d => (d.y * this.imgElem.height))
                 
                 // this.quadratData.cutLines.forEach((thisLine, iter) => {
 
