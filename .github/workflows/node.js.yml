@@ -9,10 +9,18 @@ on:
   pull_request:
     branches: [ main ]
 
+# Add permissions block at the workflow level
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   bump-version:
     name: "Bump Version"
     runs-on: ubuntu-latest
+    # Add permissions for this specific job
+    permissions:
+      contents: write
 
     steps:
       - name: "Checkout source code"
@@ -69,7 +77,7 @@ jobs:
         run: |
           echo "Q_VERSION=$(jq -r .version package.json)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Archive .exe
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: Quadrator-${{env.Q_VERSION}}
           path: |
