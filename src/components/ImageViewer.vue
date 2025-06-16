@@ -100,6 +100,7 @@ import * as d3 from 'd3';
 const { ipcRenderer } = require('electron');
 const { version } = require('../../package.json');
 const fs = require('fs');
+const setButtons = require('../utils/setButtons');
 
 export default {
     name: 'ImageViewer',
@@ -654,33 +655,7 @@ export default {
         },
 
         async setButtons() {
-            // Request CSV file selection
-            let filePath = await ipcRenderer.invoke('openFile', {
-                filters: [
-                    { name: 'CSV Files', extensions: ['csv'] }
-                ]
-            });
-            
-            // If no file selected, return
-            if (!filePath || filePath.length === 0) return;
-            
-            // Clear existing buttons
-            this.buttons.length = 0;
-            
-            // Read and process the CSV file
-            const csv = require('csv-parser');
-            const fs = require('fs');
-            
-            fs.createReadStream(filePath[0])
-                .pipe(csv())
-                .on('data', (data) => this.buttons.push(data))
-                .on('end', () => {
-                    console.log('CSV file successfully processed');
-                })
-                .on('error', (error) => {
-                    console.error('Error processing CSV:', error);
-                    this.alert('Error processing CSV file. Please try again.');
-                });
+            await setButtons(this.buttons, this.alert);
         },
 
     }

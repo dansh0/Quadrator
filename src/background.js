@@ -46,10 +46,12 @@ async function createWindow() {
     }
 
     // Selects a file from native dialog on request by renderer process
-    ipcMain.handle('openFile', async (event) => {
-        
+    ipcMain.handle('openFile', async (event, options = {}) => {
         // select file
-        let filePath = await dialog.showOpenDialog(win, {properties: ['openFile', 'multiSelections']})
+        let filePath = await dialog.showOpenDialog(win, {
+            properties: ['openFile', 'multiSelections'],
+            filters: options.filters
+        })
 
         return filePath.filePaths
     });

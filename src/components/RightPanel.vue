@@ -5,6 +5,9 @@
 <!--         <v-card-title  align="center" class="justify-center py-0">
             Select Species ID
         </v-card-title> -->
+        <v-container v-if="this.buttons.length==0" class="d-flex justify-center">
+            <v-btn x-large color=primary @click="handleSetButtons">Set Buttons</v-btn>
+        </v-container>
         <v-btn-toggle multiple background-color=tertiary @change="updateSamples()" v-model="toggles">
             <v-container grid-list-md>
                 <v-layout row wrap>
@@ -21,8 +24,8 @@
         </v-btn-toggle>
         <v-container grid-list-md text-s-center>
         <v-row class="justify-center my-2">
-            <v-btn x-large class="black--text mr-10" @click="prevSample()" color=primary >Prev</v-btn>
-            <v-btn x-large class="black--text" color=primary @click="nextSample()">Next</v-btn>
+            <v-btn large class="black--text mr-10" @click="prevSample()" color=primary :disabled="!isGeoDefined">Prev</v-btn>
+            <v-btn large class="black--text" color=primary @click="nextSample()" :disabled="!isGeoDefined">Next</v-btn>
         </v-row>
         <v-card-text  align="center" class="justify-center">
             <!-- <v-spacer /> -->
@@ -46,6 +49,7 @@
 
 <script>
 import { mapState, mapMutations } from 'vuex';
+const setButtons = require('../utils/setButtons');
 
 export default {
     name: 'RightPanel',
@@ -97,6 +101,9 @@ export default {
         },
         numOfSamples: function() {
             return this.quadratSettings.numOfSampleRows * this.quadratSettings.numOfSampleCols
+        },
+        isGeoDefined: function() {
+            return this.quadratData.samples.filter(sample => (!!sample.x && !!sample.y)).length > 0
         }
     },
     watch: {
@@ -125,7 +132,6 @@ export default {
             return fullLabel
         },
         nextSample() {
-
             if (this.inputStatus.sampleNumber + 1 == this.numOfSamples) {
                 // finish quadrat
                 console.log('Quadrat Complete');
@@ -188,6 +194,13 @@ export default {
             this.selectedSamples.forEach(sample => {
                 this.toggles.push(this.buttonCodes.indexOf(sample))
             })
+        },
+        alert(alertString) {
+            const { ipcRenderer } = require('electron');
+            ipcRenderer.invoke('alert', alertString);
+        },
+        async handleSetButtons() {
+            await setButtons(this.buttons, this.alert);
         }
     }
 }
