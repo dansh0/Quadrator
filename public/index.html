@@ -6,6 +6,22 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="<%= BASE_URL %>favicon.ico">
     <title><%= htmlWebpackPlugin.options.title %></title>
+    <style>
+      /* Disable scrolling globally */
+      html, body {
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 100vh !important;
+        width: 100vw !important;
+      }
+      
+      #app {
+        height: 100vh !important;
+        width: 100vw !important;
+        overflow: hidden !important;
+      }
+    </style>
   </head>
   <body>
     <noscript>

@@ -9,7 +9,7 @@ Vue.use(Vuex)
 const defaultState = {
     count: 0,
     imgSrc: undefined,
-    imgPathList: [],
+    imgPathList: [], //["C://Users//dshor//Documents//Github//Quadrator-Electron//src//assets//B3_1Y_T1.jpg"],
     imgElem: document.createElement('img'),
     windowHelpers: {
         rightPanelWidth: 400,

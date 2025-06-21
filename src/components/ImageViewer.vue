@@ -6,10 +6,10 @@
                     <v-col cols="12" class="d-flex flex-column">
                         <v-row class="flex-grow-0" style="height: 40%">
                             <v-col cols="12" class="d-flex align-center justify-center">
-                                <img src="@/assets/Title.png" alt="Quadrator" class="homeTitle">
+                                <img src="@/assets/QUADRATOR_LOGO_white_text_transparent.png" alt="Quadrator" class="homeTitle">
                             </v-col>
                         </v-row>
-                        <v-row class="flex-grow-0">
+                        <v-row class="flex-grow-0" style="height: 80%">
                             <v-col cols="12" class="d-flex align-center justify-center">
                                 <v-card class="pa-1 elevation-9" color=tertiary max-width="500">
                                     <v-card-text class="text-center">
@@ -40,43 +40,43 @@
             <v-row class="mr-3 mb-3 justify-center">
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary small @click="fullReset()"  v-bind="attrs" v-on="on" class="ml-5 mt-3">Start Over</v-btn>
+                        <v-btn color=primary x-small @click="fullReset()"  v-bind="attrs" v-on="on" class="ml-5 mt-3">Start Over</v-btn>
                     </template>
                     <span>Delete all unsaved data and restart</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary small @click="selectImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Load Image</v-btn>
+                        <v-btn color=primary x-small @click="selectImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Load Image</v-btn>
                     </template>
                     <span>Load one or multiple images to add to this image group</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
-                        <v-btn color="primary" small @click="setButtons()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Edit Buttons</v-btn>
+                        <v-btn color="primary" x-small @click="setButtons()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Edit Buttons</v-btn>
                     </template>
                     <span>Edit the buttons for the image group</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary small @click="resetNodes()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Reset Nodes</v-btn>
+                        <v-btn color=primary x-small @click="resetNodes()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Reset Nodes</v-btn>
                     </template>
                     <span>Reset boundary polygon definition and data nodes for this quadrat</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary small @click="exportData()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Export Data</v-btn>
+                        <v-btn color=primary x-small @click="exportData()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Export Data</v-btn>
                     </template>
                     <span>Save all entered data for all loaded quadrats as appended rows of a CSV file</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary small @click="previousImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Prev. Image</v-btn>
+                        <v-btn color=primary x-small @click="previousImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Prev. Image</v-btn>
                     </template>
                     <span>Move back to the previous image to analyze</span>
                 </v-tooltip>
                 <v-tooltip bottom>
                     <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary small @click="nextImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Next Image</v-btn>
+                        <v-btn color=primary x-small @click="nextImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Next Image</v-btn>
                     </template>
                     <span>Move forward to the next image to analyze</span>
                 </v-tooltip>
@@ -190,6 +190,9 @@ export default {
     mounted() {
 
         this.initImgElem()
+        if (this.imgPathList.length > 0) {
+            this.loadNewImage(this.imgPathList[0])
+        }
 
     },
     methods: {
