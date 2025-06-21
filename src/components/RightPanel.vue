@@ -1,12 +1,20 @@
 <template>
     <v-card id="card" :style="{'width':panelWidth}" color=tertiary height="100%" >
     <!-- <v-card min-width=400 color=tertiary width=400 height="100%" > -->
+        <MenuButtons 
+            @load-new-image="handleLoadNewImage"
+            @load-existing-image="handleLoadExistingImage"
+            @init-new-quadrat-svg="handleInitNewQuadratSVG"
+        />
         <v-text-field label="Quadrat Name" v-model="quadratData.name" class="px-5 pt-5 mt-0"></v-text-field>
 <!--         <v-card-title  align="center" class="justify-center py-0">
             Select Species ID
         </v-card-title> -->
         <v-container v-if="this.buttons.length==0" class="d-flex justify-center">
             <v-btn x-large color=primary @click="handleSetButtons">Edit Buttons</v-btn>
+        </v-container>
+        <v-container v-else class="d-flex justify-center">
+            <v-btn small color=primary @click="handleSetButtons">Edit Buttons</v-btn>
         </v-container>
         <v-btn-toggle multiple background-color=tertiary @change="updateSamples()" v-model="toggles">
             <v-container grid-list-md>
@@ -50,9 +58,13 @@
 <script>
 import { mapState, mapMutations } from 'vuex';
 const setButtons = require('../utils/setButtons');
+import MenuButtons from './MenuButtons.vue';
 
 export default {
     name: 'RightPanel',
+    components: {
+        MenuButtons
+    },
     props: {
     },
     data: () => ({
@@ -86,10 +98,10 @@ export default {
             return this.windowHelpers.rightPanelWidth + 'px'
         },
         selectedSamples: function() {
-            if (this.quadratData.samples) {
+            if (this.quadratData.samples && this.quadratData.samples[this.inputStatus.sampleNumber]) {
                 return this.quadratData.samples[this.inputStatus.sampleNumber].codes
             } else {
-                return undefined
+                return []
             }
         },
         buttonCodes: function() {
@@ -103,6 +115,7 @@ export default {
             return this.quadratSettings.numOfSampleRows * this.quadratSettings.numOfSampleCols
         },
         isGeoDefined: function() {
+            if (!this.quadratData.samples) return false;
             return this.quadratData.samples.filter(sample => (!!sample.x && !!sample.y)).length > 0
         }
     },
@@ -201,6 +214,19 @@ export default {
         },
         async handleSetButtons() {
             await setButtons(this.buttons, this.alert);
+        },
+
+        // Handle events from MenuButtons component
+        handleLoadNewImage(filePath) {
+            this.$emit('load-new-image', filePath);
+        },
+
+        handleLoadExistingImage(filePath) {
+            this.$emit('load-existing-image', filePath);
+        },
+
+        handleInitNewQuadratSVG() {
+            this.$emit('init-new-quadrat-svg');
         }
     }
 }

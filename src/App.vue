@@ -5,11 +5,20 @@
                 <v-row class="fill-height" align="stretch" no-gutters>
                     <!-- Left: ImageViewer -->
                     <v-col class="fill-height" style="box-sizing: border-box;">
-                        <ImageViewer/>
+                        <ImageViewer 
+                            ref="imageViewer"
+                            @load-new-image="handleLoadNewImage"
+                            @load-existing-image="handleLoadExistingImage"
+                            @init-new-quadrat-svg="handleInitNewQuadratSVG"
+                        />
                     </v-col>
-                    <!-- Right: ZoomPanel + RightPanel stacked -->
-                    <v-col class="fill-height d-flex ma-0 pl-2" style="box-sizing: border-box;">
-                        <RightPanel/>
+                    <!-- Right: RightPanel -->
+                    <v-col class="fill-height ma-0 pl-2" style="box-sizing: border-box;">
+                        <RightPanel 
+                            @load-new-image="handleLoadNewImage"
+                            @load-existing-image="handleLoadExistingImage"
+                            @init-new-quadrat-svg="handleInitNewQuadratSVG"
+                        />
                     </v-col>
                 </v-row>
             </v-container>
@@ -39,18 +48,9 @@ export default {
         this.updatePanelSize();
 
         // set up listener to repeat left panel calc whenever needed
-        window.addEventListener('resize', () => {
-            this.updatePanelSize();
-            
-        })
-        window.addEventListener('maximize', () => {
-            this.updatePanelSize();
-            
-        })
-        window.addEventListener('unmaximize', () => {
-            this.updatePanelSize();
-            
-        })
+        window.addEventListener('resize', this.updatePanelSize);
+        window.addEventListener('maximize', this.updatePanelSize);
+        window.addEventListener('unmaximize', this.updatePanelSize);
     },
     computed:{
         ...mapState([
@@ -74,6 +74,19 @@ export default {
                 this.windowHelpers.leftPanelWidth = window.innerWidth - 25;
             }
             this.windowHelpers.height = window.innerHeight - 25;
+        },
+
+        // Handle events from RightPanel and pass to ImageViewer
+        handleLoadNewImage(filePath) {
+            this.$refs.imageViewer.loadNewImage(filePath);
+        },
+
+        handleLoadExistingImage(filePath) {
+            this.$refs.imageViewer.loadExistingImage(filePath);
+        },
+
+        handleInitNewQuadratSVG() {
+            this.$refs.imageViewer.initNewQuadratSVG();
         }
     }
 }

@@ -37,50 +37,6 @@
             </v-container>
         </div>
         <v-container v-if="imgSrc" grid-list-md text-xs-center>
-            <v-row class="mr-3 mb-3 justify-center">
-                <v-tooltip bottom>
-                    <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary x-small @click="fullReset()"  v-bind="attrs" v-on="on" class="ml-5 mt-3">Start Over</v-btn>
-                    </template>
-                    <span>Delete all unsaved data and restart</span>
-                </v-tooltip>
-                <v-tooltip bottom>
-                    <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary x-small @click="selectImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Load Image</v-btn>
-                    </template>
-                    <span>Load one or multiple images to add to this image group</span>
-                </v-tooltip>
-                <v-tooltip bottom>
-                    <template v-slot:activator="{ on, attrs }">
-                        <v-btn color="primary" x-small @click="setButtons()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Edit Buttons</v-btn>
-                    </template>
-                    <span>Edit the buttons for the image group</span>
-                </v-tooltip>
-                <v-tooltip bottom>
-                    <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary x-small @click="resetNodes()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Reset Nodes</v-btn>
-                    </template>
-                    <span>Reset boundary polygon definition and data nodes for this quadrat</span>
-                </v-tooltip>
-                <v-tooltip bottom>
-                    <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary x-small @click="exportData()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Export Data</v-btn>
-                    </template>
-                    <span>Save all entered data for all loaded quadrats as appended rows of a CSV file</span>
-                </v-tooltip>
-                <v-tooltip bottom>
-                    <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary x-small @click="previousImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Prev. Image</v-btn>
-                    </template>
-                    <span>Move back to the previous image to analyze</span>
-                </v-tooltip>
-                <v-tooltip bottom>
-                    <template v-slot:activator="{ on, attrs }">
-                        <v-btn color=primary x-small @click="nextImage()" v-bind="attrs" v-on="on" class="ml-5 mt-3">Next Image</v-btn>
-                    </template>
-                    <span>Move forward to the next image to analyze</span>
-                </v-tooltip>
-            </v-row>
             <v-row align="center" class="mx-1 mb-1">
                 <!-- <v-img max-width="100%" max-height="100%" :src="imgSrc"/> -->
                 <svg id="quadratSelector" width="100%" height="100%" />
@@ -253,22 +209,8 @@ export default {
 
 
         // --------------------
-        // TOP BUTTON FUNCTIONS
+        // IMAGE LOADING
         // --------------------
-
-        async fullReset() {
-
-            let questionInfo = {
-                title: "Confirm Full Reset",
-                question: "Are you sure you want to delete all unsaved progress and start over?",
-                buttons: ["No", "Yes"]
-            };
-            let confirmation = await ipcRenderer.invoke('question', questionInfo);
-            if (!confirmation.response) { return }
-                
-            ipcRenderer.invoke('reload')
-            // this.RESET_ALL();
-        },
 
         async selectImage() {
             let filePaths = await ipcRenderer.invoke('openFile')
@@ -284,91 +226,30 @@ export default {
             // load image if one is defined
             console.log("File Paths:", filePaths)
             this.loadNewImage(filePaths[0]);
-            
         },
 
-        async resetNodes() {
-            if (this.inputStatus.nodes.length > 0) {
-                let questionInfo = {
-                    title: "Confirm Node Reset",
-                    question: "Are you sure you want to reset your node selections?",
-                    buttons: ["No", "Yes"]
-                };
-                let confirmation = await ipcRenderer.invoke('question', questionInfo);
-                if (!confirmation.response) { return }
-            }
+        loadNewImage(filePath) {
+            // remove listeners
+            d3.select('#quadratSelector').on('click', null);
+            d3.select('#quadratSelector').on('mousemove', null);
 
-            // if all good then init new one
-            this.initNewQuadratSVG()
+            // update data
+            this.CHANGE_IMG_SRC(filePath);
+            this.NEW_QUADRAT();
+
+            this.newImage = true;
+            this.imgElem.src = this.imgSrc;
         },
 
-        async exportData() {
+        loadExistingImage(filePath) {
+            // remove listeners
+            d3.select('#quadratSelector').on('click', null);
+            d3.select('#quadratSelector').on('mousemove', null);
 
-            // update running data list
-            this.UPDATE_RUNNING_DATA();
-
-            let filePath = await ipcRenderer.invoke('appendFile');
-
-            // quit if file select was canceled
-            if (!filePath.filePath) { return }
-
-            console.log("Export Path:", filePath.filePath)
-            
-            // build csv text
-            let dataOutput = ""
-            this.runningData.forEach(image => {
-                dataOutput += image.quadratData.toCSV(this.buttons);
-            })
-            // dataOutput = this.quadratData.toCSV(this.buttons)
-            if (fs.existsSync(filePath.filePath)) {
-                fs.appendFile(filePath.filePath, dataOutput, function (err) {
-                    if (err) {
-                        this.alert("Append/Save Failed. Make sure your file is not open in other programs")
-                        throw err;
-                    }
-                    console.log('Data Exported!');
-                });
-            } else {
-                let outputWithHeader = "Quadrat Title,Image Path,ID Date,Species Code,Species,Group Name,Species Count,Species Coverage %\n" + dataOutput; 
-                fs.writeFile(filePath.filePath, outputWithHeader, function (err) {
-                    if (err) throw err;
-                    console.log('Data Exported!');
-                });
-            }
-
-        },
-
-        previousImage() {
-            let currentImgIndex = this.imgPathList.indexOf(this.quadratData.imgSrc);
-
-            // do nothing if first image
-            if (currentImgIndex == 0) { return }
-
-            // update running data list
-            this.UPDATE_RUNNING_DATA();
-
-            // load next quadrat
-            this.SWAP_QUADRAT(this.runningData[currentImgIndex-1]);
-            this.loadExistingImage(this.imgPathList[currentImgIndex-1]);
-            
-        },
-
-        nextImage() {
-            let currentImgIndex = this.imgPathList.indexOf(this.quadratData.imgSrc);
-
-            // do nothing if last image
-            if (currentImgIndex == (this.imgPathList.length - 1)) { return }
-
-            // update running data list
-            this.UPDATE_RUNNING_DATA();
-
-            // load next quadrat
-            if (!this.runningData[currentImgIndex+1]) { // make new one
-                this.loadNewImage(this.imgPathList[currentImgIndex+1]);
-            } else { // load existing one
-                this.SWAP_QUADRAT(this.runningData[currentImgIndex+1]);
-                this.loadExistingImage(this.imgPathList[currentImgIndex+1]);
-            }
+            // update only the image src
+            this.CHANGE_IMG_SRC(filePath);
+            this.newImage = false;
+            this.imgElem.src = this.imgSrc;
         },
 
 
@@ -395,7 +276,7 @@ export default {
             let self = this;
 
             // make data model points
-            let nodes = this.inputStatus.nodes;
+            let nodes = this.inputStatus.nodes || [];
             let numOfSampleRows = this.quadratSettings.numOfSampleRows;
             let numOfSampleCols = this.quadratSettings.numOfSampleCols;
             if (this.quadratSettings.restrictToQuad || nodes.length == 5) {
@@ -425,7 +306,7 @@ export default {
 
         updateSamplePoints() {
 
-            if (!this.quadratData.samples[0].x) { return } // not initialized yet
+            if (!this.quadratData.samples || !this.quadratData.samples[0] || !this.quadratData.samples[0].x) { return } // not initialized yet
 
             let self = this
 
@@ -454,8 +335,11 @@ export default {
 
             this.svgElem.selectAll('circle').remove();
 
+            // Safely handle undefined nodes
+            const nodes = this.inputStatus.nodes || [];
+
             this.svgElem.selectAll('nodeCircle')
-                .data(this.inputStatus.nodes).enter()
+                .data(nodes).enter()
                 .append('circle')
                     .attr('class', 'nodeCircle')
                     .attr('cx', data => data.x * this.imgElem.width)
@@ -470,7 +354,7 @@ export default {
             this.svgElem.selectAll('path').remove();
 
             this.svgElem.append('path')
-                .datum(this.inputStatus.nodes)
+                .datum(nodes)
                 .attr('d', line)
                 .attr('fill', 'none')
                 .attr('stroke', "red")
@@ -492,8 +376,12 @@ export default {
             // clear previous images
             this.svgElem.selectAll().remove();
 
-            // clear previous data
-            this.inputStatus.nodes.length = 0;
+            // clear previous data - safely initialize if undefined
+            if (!this.inputStatus.nodes) {
+                this.inputStatus.nodes = [];
+            } else {
+                this.inputStatus.nodes.length = 0;
+            }
 
             this.svgImage = this.svgElem.append('svg:image')
                 .attr('xlink:href', this.imgElem.src)
@@ -573,7 +461,7 @@ export default {
         loadExistingQuadratSVG() {
 
             // redirect to reset quadrat if empty (this allows listeners to reset)
-            if (this.inputStatus.nodes.length == 0) {
+            if (!this.inputStatus.nodes || this.inputStatus.nodes.length == 0) {
                 this.initNewQuadratSVG();
                 return
             }
@@ -611,37 +499,6 @@ export default {
             } else {
                 document.body.style.cursor = 'default';
             }
-        },
-
-
-        // -----------
-        // SAVE & LOAD
-        // -----------
-
-        loadNewImage(filePath) {
-            // remove listeners
-            d3.select('#quadratSelector').on('click', null);
-            d3.select('#quadratSelector').on('mousemove', null);
-
-            // update data
-            this.CHANGE_IMG_SRC(filePath);
-            this.NEW_QUADRAT();
-
-            this.newImage = true;
-            this.imgElem.src = this.imgSrc;
-
-        },
-
-        loadExistingImage(filePath) {
-            // remove listeners
-            d3.select('#quadratSelector').on('click', null);
-            d3.select('#quadratSelector').on('mousemove', null);
-
-            // update only the image src
-            this.CHANGE_IMG_SRC(filePath);
-            this.newImage = false;
-            this.imgElem.src = this.imgSrc;
-
         },
 
 
