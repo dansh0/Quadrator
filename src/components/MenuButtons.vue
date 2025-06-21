@@ -3,7 +3,7 @@
         <v-row class="justify-center">
             <v-tooltip bottom v-for="button in menuButtons" :key="button.btnText">
                 <template v-slot:activator="{ on, attrs }">
-                    <v-btn color=primary small @click="button.btnFunc" v-bind="attrs" v-on="on" class="ma-1">{{ button.btnText }}</v-btn>
+                    <v-btn color=primary small @click="button.btnFunc" v-bind="attrs" v-on="on" class="ma-1" style="width:120px">{{ button.btnText }}</v-btn>
                 </template>
                 <span>{{ button.btnTooltip }}</span>
             </v-tooltip>
@@ -83,6 +83,9 @@ export default {
         },
 
         async selectImage() {
+            // update running data list
+            this.UPDATE_RUNNING_DATA();
+
             let filePaths = await ipcRenderer.invoke('openFile')
             
             // if canceled, then quick action

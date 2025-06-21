@@ -36,8 +36,8 @@
                 </v-row>
             </v-container>
         </div>
-        <v-container v-if="imgSrc" grid-list-md text-xs-center>
-            <v-row align="center" class="mx-1 mb-1">
+        <v-container v-if="imgSrc" class="fill-height pa-0">
+            <v-row align="center" class="fill-height ma-0">
                 <!-- <v-img max-width="100%" max-height="100%" :src="imgSrc"/> -->
                 <svg id="quadratSelector" width="100%" height="100%" />
             </v-row>
@@ -52,7 +52,6 @@ import * as d3 from 'd3';
 const { ipcRenderer } = require('electron');
 const { version } = require('../../package.json');
 const fs = require('fs');
-const setButtons = require('../utils/setButtons');
 
 export default {
     name: 'ImageViewer',
@@ -74,8 +73,7 @@ export default {
             'quadratData',
             'runningData',
             'quadratSettings',
-            'inputStatus',
-            'buttons'
+            'inputStatus'
         ]),
         appVersion: function() {
             return version
@@ -117,8 +115,9 @@ export default {
         panelHeight: function() {
             //update imgElem height
             // set height to maintain aspect
+            console.log('height')
             if (this.imageAspect && this.imageAspect < this.panelAspect) {
-                this.imgElem.height = this.windowHelpers.height - 200;
+                this.imgElem.height = this.windowHelpers.height;
                 this.imgElem.width = this.imgElem.height * this.imageAspect;
             }
 
@@ -129,8 +128,9 @@ export default {
         },
         panelWidth: function() {
             // set height to maintain aspect
+            console.log('width')
             if (this.imageAspect && this.imageAspect > this.panelAspect) {
-                this.imgElem.width = this.windowHelpers.leftPanelWidth - 50;
+                this.imgElem.width = this.windowHelpers.leftPanelWidth;
                 this.imgElem.height = this.imgElem.width / this.imageAspect;
             }
 
@@ -186,10 +186,10 @@ export default {
 
                 // set height or width to maintain aspect
                 if (this.imageAspect && this.imageAspect > this.panelAspect) {
-                    this.imgElem.width = this.windowHelpers.leftPanelWidth - 50;
+                    this.imgElem.width = this.windowHelpers.leftPanelWidth;
                     this.imgElem.height = this.imgElem.width / this.imageAspect;
                 } else {
-                    this.imgElem.height = this.windowHelpers.height - 200;
+                    this.imgElem.height = this.windowHelpers.height;
                     this.imgElem.width = this.imgElem.height * this.imageAspect;
                 } 
 
@@ -239,6 +239,8 @@ export default {
 
             this.newImage = true;
             this.imgElem.src = this.imgSrc;
+
+            console.log(this.imgPathList)
         },
 
         loadExistingImage(filePath) {
@@ -499,19 +501,6 @@ export default {
             } else {
                 document.body.style.cursor = 'default';
             }
-        },
-
-
-        // ---------------
-        // OTHER UTILITIES
-        // ---------------
-
-        alert(alertString) {
-            ipcRenderer.invoke('alert', alertString);
-        },
-
-        async setButtons() {
-            await setButtons(this.buttons, this.alert);
         },
 
     }
