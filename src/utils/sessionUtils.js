@@ -29,7 +29,7 @@ async function saveSessionToFile(filePath, sessionState) {
 /**
  * Loads and validates session data from a JSON file.
  * @param {string} filePath - The path of the file to load.
- * @returns {Promise<object>} The validated and re-hydrated session state object.
+ * @returns {Promise<object>} The validated session state object.
  */
 async function loadSessionFromFile(filePath) {
     const jsonString = await fs.readFile(filePath, 'utf8');
@@ -40,15 +40,8 @@ async function loadSessionFromFile(filePath) {
         throw new Error("Invalid or corrupt session file.");
     }
 
-    // Re-instantiate class objects
-    sessionState.runningData.forEach(data => {
-        if (data.quadratData) {
-            Object.setPrototypeOf(data.quadratData, Quadrat.prototype);
-        }
-        if (data.inputStatus) {
-            Object.setPrototypeOf(data.inputStatus, InputState.prototype);
-        }
-    });
+    // Note: Object reconstruction is now handled in the Vuex store's RESTORE_SESSION mutation
+    // This ensures proper class instances are created with all methods intact
 
     return sessionState;
 }

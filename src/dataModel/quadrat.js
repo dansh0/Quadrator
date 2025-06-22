@@ -16,6 +16,20 @@ class Quadrat {
         this.initSamples();
     }
 
+    /**
+     * Creates a Quadrat instance from saved JSON data
+     * @param {Object} savedData - The saved quadrat data object
+     * @returns {Quadrat} A new Quadrat instance with the saved data
+     */
+    static quadratFromSavedData(savedData) {
+        const quadrat = new Quadrat(savedData.numOfSamples, savedData.imgSrc);
+        quadrat.name = savedData.name || path.parse(savedData.imgSrc).name;
+        quadrat.samples = savedData.samples || [];
+        quadrat.cutLines = savedData.cutLines || [];
+        quadrat.polygons = savedData.polygons || [];
+        return quadrat;
+    }
+
     initSamples() {
         for (let iSample=0; iSample<this.numOfSamples; iSample++) {
             this.samples.push(new Sample())

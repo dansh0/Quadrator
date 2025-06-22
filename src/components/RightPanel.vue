@@ -70,7 +70,7 @@ export default {
     props: {
     },
     data: () => ({
-        hotKeySwitch: false,
+        hotKeySwitch: localStorage.getItem('hotKeySwitch')!="false" || false,
         toggles: []
         // selectValue: 'No Filter',
         // selectValues: [
@@ -183,6 +183,7 @@ export default {
             } else {
                 window.removeEventListener("keydown", this.hotKeyFunc);
             }
+            localStorage.setItem('hotKeySwitch', this.hotKeySwitch);
         },
         hotKeyFunc(event) {
             if (event.keyCode === 39 || event.keyCode === 13){

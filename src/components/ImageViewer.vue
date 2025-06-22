@@ -131,12 +131,12 @@ export default {
         panelHeight: function() {
             //update imgElem height
             // set height to maintain aspect
-            //if (this.imageAspect && this.imageAspect < this.panelAspect) {
-            //    this.imgElem.height = this.windowHelpers.height;
-            //    this.imgElem.width = this.imgElem.height * this.imageAspect;
-            //}
-            this.imgElem.height = this.windowHelpers.height;
-            this.imgElem.width = this.windowHelpers.leftPanelWidth;
+            if (this.imageAspect && this.imageAspect < this.panelAspect) {
+                this.imgElem.height = this.windowHelpers.height;
+                this.imgElem.width = this.imgElem.height * this.imageAspect;
+            }
+            // this.imgElem.height = this.windowHelpers.height;
+            // this.imgElem.width = this.windowHelpers.leftPanelWidth;
 
             // update canvas if applicable
             if (document.getElementById('quadratSelector')) {
@@ -145,12 +145,12 @@ export default {
         },
         panelWidth: function() {
             // set height to maintain aspect
-            //if (this.imageAspect && this.imageAspect > this.panelAspect) {
-            //    this.imgElem.width = this.windowHelpers.leftPanelWidth;
-            //    this.imgElem.height = this.imgElem.width / this.imageAspect;
-            //}
-            this.imgElem.height = this.windowHelpers.height;
-            this.imgElem.width = this.windowHelpers.leftPanelWidth;
+            if (this.imageAspect && this.imageAspect > this.panelAspect) {
+                this.imgElem.width = this.windowHelpers.leftPanelWidth;
+                this.imgElem.height = this.imgElem.width / this.imageAspect;
+            }
+            // this.imgElem.height = this.windowHelpers.height;
+            // this.imgElem.width = this.windowHelpers.leftPanelWidth;
 
             // update canvas if applicable
             if (document.getElementById('quadratSelector')) {
@@ -182,7 +182,7 @@ export default {
         // ----
         initZoom() {
             const zoom = d3.zoom()
-                .scaleExtent([1, 10]) // Set min/max zoom levels
+                .scaleExtent([.01, 100]) // Set min/max zoom levels
                 .filter(event => {
                     // Only allow zoom/pan when the quadrat geometry has been defined
                     return this.isGeoDefined;
@@ -202,8 +202,6 @@ export default {
 
         initImgElem() {
 
-            // this.imgElem = document.createElement('img');
-            // this.imgElem.height = this.windowHelpers.height - 200;
             this.imgElem.style.position = "absolute";
             this.imgElem.style.top = 0;
             this.imgElem.style.left = 0;
@@ -220,16 +218,13 @@ export default {
                 this.imageAspect = this.imgElem.naturalWidth/this.imgElem.naturalHeight;
 
                 // set height or width to maintain aspect
-                //if (this.imageAspect && this.imageAspect > this.panelAspect) {
-                //    this.imgElem.width = this.windowHelpers.leftPanelWidth;
-                //    this.imgElem.height = this.imgElem.width / this.imageAspect;
-                //} else {
-                //    this.imgElem.height = this.windowHelpers.height;
-                //    this.imgElem.width = this.imgElem.height * this.imageAspect;
-                //} 
-
-                this.imgElem.width = this.windowHelpers.leftPanelWidth;
-                this.imgElem.height = this.windowHelpers.height;
+                if (this.imageAspect && this.imageAspect > this.panelAspect) {
+                    this.imgElem.width = this.windowHelpers.leftPanelWidth;
+                    this.imgElem.height = this.imgElem.width / this.imageAspect;
+                } else {
+                    this.imgElem.height = this.windowHelpers.height;
+                    this.imgElem.width = this.imgElem.height * this.imageAspect;
+                } 
 
                 // increment counter
                 this.inputStatus.loadedIteration += 1
@@ -337,9 +332,9 @@ export default {
 
         updateCanvasProperties() {
             
-            // update canvas size
-            this.svgElem.style('width', this.imgElem.width);
-            this.svgElem.style('height', this.imgElem.height);
+            // update canvas size (make 2x larger for extra space while maintaining aspect ratio)
+            this.svgElem.style('width', 10*this.imgElem.width);
+            this.svgElem.style('height', 10*this.imgElem.height);
 
             // update image size
             this.svgImage
@@ -466,6 +461,8 @@ export default {
             }
 
             // Add a group element that will contain all zoomable/pannable elements
+            // Remove all existing groups before adding a new one
+            this.svgElem.selectAll('g').remove();
             this.zoomableGroup = this.svgElem.append('g');
 
             // clear previous data - safely initialize if undefined

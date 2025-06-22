@@ -89,7 +89,12 @@ const store = new Vuex.Store({
         RESTORE_SESSION(state, sessionState) {
             // Restore the state from the saved session
             state.imgPathList = sessionState.imgPathList;
-            state.runningData = sessionState.runningData;
+            
+            // Restore all quadrats in runningData to proper class instances
+            state.runningData = sessionState.runningData.map(data => ({
+                inputStatus: InputState.inputStateFromSavedData(data.inputStatus),
+                quadratData: Quadrat.quadratFromSavedData(data.quadratData)
+            }));
 
             // Find the correct data to make active
             const currentImgIndex = state.imgPathList.indexOf(sessionState.currentImgSrc);
