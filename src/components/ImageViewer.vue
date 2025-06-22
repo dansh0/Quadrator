@@ -61,6 +61,7 @@ export default {
     data: () => ({
         // imgElem: undefined,
         svgElem: undefined,
+        zoomableGroup: undefined, // Group element for zooming and panning
         imageAspect: undefined,
         newImage: true
     }),
@@ -110,16 +111,21 @@ export default {
                 zIndex: 0
             }
         },
+        isGeoDefined: function() {
+            if (!this.quadratData.samples) return false;
+            return this.quadratData.samples.filter(sample => (!!sample.x && !!sample.y)).length > 0
+        }
     },
     watch: {
         panelHeight: function() {
             //update imgElem height
             // set height to maintain aspect
-            console.log('height')
-            if (this.imageAspect && this.imageAspect < this.panelAspect) {
-                this.imgElem.height = this.windowHelpers.height;
-                this.imgElem.width = this.imgElem.height * this.imageAspect;
-            }
+            //if (this.imageAspect && this.imageAspect < this.panelAspect) {
+            //    this.imgElem.height = this.windowHelpers.height;
+            //    this.imgElem.width = this.imgElem.height * this.imageAspect;
+            //}
+            this.imgElem.height = this.windowHelpers.height;
+            this.imgElem.width = this.windowHelpers.leftPanelWidth;
 
             // update canvas if applicable
             if (document.getElementById('quadratSelector')) {
@@ -128,11 +134,12 @@ export default {
         },
         panelWidth: function() {
             // set height to maintain aspect
-            console.log('width')
-            if (this.imageAspect && this.imageAspect > this.panelAspect) {
-                this.imgElem.width = this.windowHelpers.leftPanelWidth;
-                this.imgElem.height = this.imgElem.width / this.imageAspect;
-            }
+            //if (this.imageAspect && this.imageAspect > this.panelAspect) {
+            //    this.imgElem.width = this.windowHelpers.leftPanelWidth;
+            //    this.imgElem.height = this.imgElem.width / this.imageAspect;
+            //}
+            this.imgElem.height = this.windowHelpers.height;
+            this.imgElem.width = this.windowHelpers.leftPanelWidth;
 
             // update canvas if applicable
             if (document.getElementById('quadratSelector')) {
@@ -164,6 +171,25 @@ export default {
         // ----
         // INIT
         // ----
+        initZoom() {
+            const zoom = d3.zoom()
+                .scaleExtent([1, 10]) // Set min/max zoom levels
+                .filter(event => {
+                    // Only allow zoom/pan when the quadrat geometry has been defined
+                    return this.isGeoDefined;
+                })
+                .on('zoom', (event) => {
+                    if (this.zoomableGroup) {
+                        this.zoomableGroup.attr('transform', event.transform);
+                    }
+                });
+            
+            if (this.svgElem) {
+                // Disable zoom on double-click, which can be disruptive
+                this.svgElem.on("dblclick.zoom", null); 
+                this.svgElem.call(zoom);
+            }
+        },
 
         initImgElem() {
 
@@ -185,13 +211,16 @@ export default {
                 this.imageAspect = this.imgElem.naturalWidth/this.imgElem.naturalHeight;
 
                 // set height or width to maintain aspect
-                if (this.imageAspect && this.imageAspect > this.panelAspect) {
-                    this.imgElem.width = this.windowHelpers.leftPanelWidth;
-                    this.imgElem.height = this.imgElem.width / this.imageAspect;
-                } else {
-                    this.imgElem.height = this.windowHelpers.height;
-                    this.imgElem.width = this.imgElem.height * this.imageAspect;
-                } 
+                //if (this.imageAspect && this.imageAspect > this.panelAspect) {
+                //    this.imgElem.width = this.windowHelpers.leftPanelWidth;
+                //    this.imgElem.height = this.imgElem.width / this.imageAspect;
+                //} else {
+                //    this.imgElem.height = this.windowHelpers.height;
+                //    this.imgElem.width = this.imgElem.height * this.imageAspect;
+                //} 
+
+                this.imgElem.width = this.windowHelpers.leftPanelWidth;
+                this.imgElem.height = this.windowHelpers.height;
 
                 // increment counter
                 this.inputStatus.loadedIteration += 1
@@ -308,39 +337,45 @@ export default {
 
         updateSamplePoints() {
 
-            if (!this.quadratData.samples || !this.quadratData.samples[0] || !this.quadratData.samples[0].x) { return } // not initialized yet
+            if (!this.zoomableGroup || !this.quadratData.samples || this.quadratData.samples.length === 0 || !this.quadratData.samples[0].x) { return; }
 
-            let self = this
+            const self = this;
+            // Use a proper D3 data join to add, update, and remove circles
+            const selection = this.zoomableGroup.selectAll('.sampleCircle')
+                .data(this.quadratData.samples, d => d.sampleNumber); // Key function for object constancy
 
-            this.svgElem.selectAll('sampleCircle')
-                .data(this.quadratData.samples).enter()
+            // EXIT old elements
+            selection.exit().remove();
+
+            // ENTER new elements
+            const enterSelection = selection.enter()
                 .append('circle')
-                    .attr('class', 'sampleCircle')
-                    .attr('cx', data => data.x * this.imgElem.width)
-                    .attr('cy', data => data.y * this.imgElem.height)
-                    .attr('r', "1%")
-                    .attr('sampleNumber', data => data.sampleNumber)
-                    .attr('fill', 'DarkOrchid')
-                    .attr('stroke', 'Purple')
-                    .on('click', function(event) {
-                        self.inputStatus.sampleNumber = parseInt(d3.select(this).attr('sampleNumber'));
-                    })
-                    .filter(function() {
-                        return parseInt(d3.select(this).attr("sampleNumber")) == self.inputStatus.sampleNumber;
-                    })
-                    .attr('fill', 'green')
-                    .attr('stroke', 'darkgreen')
+                .attr('class', 'sampleCircle')
+                .on('click', (event, d) => {
+                    self.inputStatus.sampleNumber = d.sampleNumber;
+                });
 
+            // UPDATE existing elements and MERGE enter selection
+            selection.merge(enterSelection)
+                .attr('cx', d => d.x * this.imgElem.width)
+                .attr('cy', d => d.y * this.imgElem.height)
+                .attr('r', "1%")
+                .attr('sampleNumber', d => d.sampleNumber)
+                // Dynamically set fill and stroke based on the currently selected sample
+                .attr('fill', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'green' : 'DarkOrchid')
+                .attr('stroke', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'darkgreen' : 'Purple');
         },
 
         makeCircles() {
+            if (!this.zoomableGroup) { return; } // Safety check
 
-            this.svgElem.selectAll('circle').remove();
+            this.zoomableGroup.selectAll('circle').remove();
+            this.zoomableGroup.selectAll('path').remove();
 
             // Safely handle undefined nodes
             const nodes = this.inputStatus.nodes || [];
 
-            this.svgElem.selectAll('nodeCircle')
+            this.zoomableGroup.selectAll('.nodeCircle')
                 .data(nodes).enter()
                 .append('circle')
                     .attr('class', 'nodeCircle')
@@ -353,9 +388,7 @@ export default {
                 .x(d => (d.x * this.imgElem.width))
                 .y(d => (d.y * this.imgElem.height))
                 
-            this.svgElem.selectAll('path').remove();
-
-            this.svgElem.append('path')
+            this.zoomableGroup.append('path')
                 .datum(nodes)
                 .attr('d', line)
                 .attr('fill', 'none')
@@ -375,8 +408,13 @@ export default {
 
             this.svgElem = d3.select('#quadratSelector');
 
-            // clear previous images
-            this.svgElem.selectAll().remove();
+            // Explicitly remove the old zoomable group if it exists
+            if (this.zoomableGroup) {
+                this.zoomableGroup.remove();
+            }
+
+            // Add a group element that will contain all zoomable/pannable elements
+            this.zoomableGroup = this.svgElem.append('g');
 
             // clear previous data - safely initialize if undefined
             if (!this.inputStatus.nodes) {
@@ -385,7 +423,7 @@ export default {
                 this.inputStatus.nodes.length = 0;
             }
 
-            this.svgImage = this.svgElem.append('svg:image')
+            this.svgImage = this.zoomableGroup.append('svg:image')
                 .attr('xlink:href', this.imgElem.src)
 
             if (this.quadratData.samples) {
@@ -397,6 +435,9 @@ export default {
 
             // clear previous shapes
             this.makeCircles();
+            
+            // Initialize zoom behavior on the main SVG
+            this.initZoom();
 
             let self = this
             this.svgElem.on('click', function(event) {
@@ -470,11 +511,16 @@ export default {
 
             this.svgElem = d3.select('#quadratSelector');
 
-            // clear previous images
-            this.svgElem.selectAll().remove();
+            // Explicitly remove the old zoomable group if it exists
+            if (this.zoomableGroup) {
+                this.zoomableGroup.remove();
+            }
+
+            // Add a group element that will contain all zoomable/pannable elements
+            this.zoomableGroup = this.svgElem.append('g');
 
             // show image
-            this.svgImage = this.svgElem.append('svg:image')
+            this.svgImage = this.zoomableGroup.append('svg:image')
                 .attr('xlink:href', this.imgElem.src)
 
 
@@ -483,7 +529,9 @@ export default {
 
             // clear previous shapes
             this.makeCircles();
-
+            
+            // Initialize zoom behavior on the main SVG
+            this.initZoom();
         },
 
         _cursorCompletePoly(subEvent) { 
