@@ -4,12 +4,12 @@
             <v-container fill-height grid-list-md text-xs-center>
                 <v-row class="fill-height">
                     <v-col cols="12" class="d-flex flex-column">
-                        <v-row class="flex-grow-0" style="height: 40%">
+                        <v-row class="flex-grow-0" style="height: 50%">
                             <v-col cols="12" class="d-flex align-center justify-center">
                                 <img src="@/assets/QUADRATOR_LOGO_white_text_transparent.png" alt="Quadrator" class="homeTitle">
                             </v-col>
                         </v-row>
-                        <v-row class="flex-grow-0" style="height: 80%">
+                        <v-row class="flex-grow-0" style="height: 50%">
                             <v-col cols="12" class="d-flex align-center justify-center">
                                 <v-card class="pa-1 elevation-9" color=tertiary max-width="500">
                                     <v-card-text class="text-center">

@@ -190,7 +190,7 @@ export default {
                 this.nextSample();
             } else if (event.keyCode === 37 || event.keyCode == 8){
                 this.prevSample();
-            } else if (this.toggles && this.hotKeys.includes(event.key)) {
+            } else if (this.toggles && this.hotKeys.includes(event.key) && !event.ctrlKey && !event.shiftKey) {
                 let buttonIndex = this.hotKeys.indexOf(event.key);
                 if (!this.toggles.includes(buttonIndex)) {
                     this.toggles.push(buttonIndex);

@@ -31,21 +31,6 @@ export default {
         menuButtons() {
             return [
                 {
-                    btnText: 'Start Over',
-                    btnFunc: this.fullReset,
-                    btnTooltip: 'Delete all unsaved data and restart'
-                },
-                {
-                    btnText: 'Load Session',
-                    btnFunc: this.loadSession,
-                    btnTooltip: 'Load a previously saved session from a file'
-                },
-                {
-                    btnText: 'Save Session',
-                    btnFunc: this.saveSession,
-                    btnTooltip: 'Save the current session to a file'
-                },
-                {
                     btnText: 'Load Image',
                     btnFunc: this.selectImage,
                     btnTooltip: 'Load one or multiple images to add to this image group'
@@ -54,6 +39,21 @@ export default {
                     btnText: 'Reset Nodes',
                     btnFunc: this.resetNodes,
                     btnTooltip: 'Reset boundary polygon definition and data nodes for this quadrat'
+                },
+                {
+                    btnText: 'Start Over',
+                    btnFunc: this.fullReset,
+                    btnTooltip: 'Delete all unsaved data and restart'
+                },
+                {
+                    btnText: 'Save Session',
+                    btnFunc: this.saveSession,
+                    btnTooltip: 'Save the current session to a file'
+                },
+                {
+                    btnText: 'Load Session',
+                    btnFunc: this.loadSession,
+                    btnTooltip: 'Load a previously saved session from a file'
                 },
                 {
                     btnText: 'Export Data',
@@ -69,7 +69,12 @@ export default {
                     btnText: 'Next Image',
                     btnFunc: this.nextImage,
                     btnTooltip: 'Move forward to the next image to analyze'
-                }
+                },
+                //{
+                //    btnText: 'Export QA',
+                //    btnFunc: this.exportQAReport,
+                //    btnTooltip: 'Export a report of the codes chosen for this quadrat'
+                //}
             ];
         }
     },
@@ -195,6 +200,23 @@ export default {
             console.log("Export Path:", filePath.filePath)
             
             await exportDataToCSV(filePath.filePath, this.runningData, this.buttons);
+        },
+
+        async exportQAReport() {
+            let filePath = await ipcRenderer.invoke('saveFile', {
+                filters: [{ name: 'CSV Files', extensions: ['csv'] }]
+            });
+            
+            if (!filePath) { return }
+          
+            const qaData = this.quadratData.samples.map(sample => {
+                return {
+                    sampleNumber: sample.sampleNumber,
+                    codes: sample.codes
+                }
+            })
+
+            console.log(qaData)
         },
 
         previousImage() {
