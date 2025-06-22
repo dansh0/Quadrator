@@ -450,8 +450,10 @@ export default {
                 .attr('stroke-width', this.svgSizes.CIRCLE_STROKE_WIDTH)
                 .attr('sampleNumber', d => d.sampleNumber)
                 // Dynamically set fill and stroke based on the currently selected sample
-                .attr('fill', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'none' : 'orange')
-                .attr('stroke', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'none' : 'darkorange');
+                .attr('fill', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'none' : // check for current sample being selected sample
+                    self.quadratData.samples[d.sampleNumber].codes.length > 0 ? 'lightblue' : 'orange') // check if codes have been assigned
+                .attr('stroke', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'none' : 
+                    self.quadratData.samples[d.sampleNumber].codes.length > 0 ? 'blue' : 'darkorange');
 
             // Handle crosshair for selected sample
             this.updateSelectedCrosshair();
