@@ -74,7 +74,17 @@ export default {
         zoomableGroup: undefined, // Group element for zooming and panning
         imageAspect: undefined,
         newImage: true,
-        hasSavedSession: false
+        hasSavedSession: false,
+        // SVG element size constants (in pixels) - will be adjusted during zoom
+        svgSizes: {
+            SAMPLE_CIRCLE_RADIUS: 8,
+            NODE_CIRCLE_RADIUS: 8,
+            LINE_STROKE_WIDTH: 2,
+            CUT_LINE_STROKE_WIDTH: 2,
+            CIRCLE_STROKE_WIDTH: 1, // Add stroke width for circles
+            CROSSHAIR_LENGTH: 16, // Length of crosshair lines
+            CROSSHAIR_STROKE_WIDTH: 1 // Stroke width of crosshair lines
+        }
     }),
     computed: {
         ...mapState([
@@ -159,6 +169,7 @@ export default {
         },
         'inputStatus.sampleNumber': function() {
             this.updateSamplePoints();
+            this.updateSelectedCrosshair();
         }
     },
     mounted() {
@@ -190,6 +201,26 @@ export default {
                 .on('zoom', (event) => {
                     if (this.zoomableGroup) {
                         this.zoomableGroup.attr('transform', event.transform);
+                        
+                        // Adjust SVG element sizes to maintain consistent visual appearance during zoom
+                        const scale = event.transform.k;
+                        const baseRadius = 8;
+                        const baseStrokeWidth = 2;
+                        const baseCircleStrokeWidth = 1;
+                        const baseCrosshairLength = 16;
+                        const baseCrosshairStrokeWidth = 1;
+                        
+                        // Update sizes inversely to zoom scale to maintain visual size
+                        this.svgSizes.SAMPLE_CIRCLE_RADIUS = baseRadius / (0.5 + 0.5*scale);
+                        this.svgSizes.NODE_CIRCLE_RADIUS = baseRadius / (0.5 + 0.5*scale);
+                        this.svgSizes.LINE_STROKE_WIDTH = baseStrokeWidth / (0.5 + 0.5*scale);
+                        this.svgSizes.CUT_LINE_STROKE_WIDTH = baseStrokeWidth / (0.5 + 0.5*scale);
+                        this.svgSizes.CIRCLE_STROKE_WIDTH = baseCircleStrokeWidth / (0.5 + 0.5*scale);
+                        this.svgSizes.CROSSHAIR_LENGTH = baseCrosshairLength / (0.5 + 0.5*scale);
+                        this.svgSizes.CROSSHAIR_STROKE_WIDTH = baseCrosshairStrokeWidth / (0.5 + 0.5*scale);
+                        
+                        // Update all existing elements with new sizes
+                        this.updateElementSizes();
                     }
                 });
             
@@ -246,21 +277,6 @@ export default {
         // --------------------
 
         async selectImage() {
-            // If a session exists, warn the user that loading a new image will overwrite it.
-            if (this.hasSavedSession) {
-                const lastSession = JSON.parse(localStorage.getItem('lastSession'));
-                if (lastSession.runningData.length > 0) {
-                    // Only warn if there is actually data saved
-                    const questionInfo = {
-                        title: "Overwrite Saved Session?",
-                        question: "Loading new images will overwrite your last saved session. Are you sure you want to continue?",
-                        buttons: ["No", "Yes"]
-                    };
-                    const confirmation = await ipcRenderer.invoke('question', questionInfo);
-                    if (!confirmation.response) { return; }
-                }
-            }
-
             let filePaths = await ipcRenderer.invoke('openFile')
             
             // if canceled, then quick action
@@ -330,9 +346,30 @@ export default {
         // SVG TOOLS
         // ---------
 
+        updateElementSizes() {
+            if (!this.zoomableGroup) return;
+            
+            // Update sample circle sizes and stroke widths
+            this.zoomableGroup.selectAll('.sampleCircle')
+                .attr('r', this.svgSizes.SAMPLE_CIRCLE_RADIUS)
+                .attr('stroke-width', this.svgSizes.CIRCLE_STROKE_WIDTH);
+            
+            // Update node circle sizes and stroke widths
+            this.zoomableGroup.selectAll('.nodeCircle')
+                .attr('r', this.svgSizes.NODE_CIRCLE_RADIUS)
+                .attr('stroke-width', this.svgSizes.CIRCLE_STROKE_WIDTH);
+            
+            // Update line stroke widths
+            this.zoomableGroup.selectAll('path')
+                .attr('stroke-width', this.svgSizes.LINE_STROKE_WIDTH);
+            
+            // Update crosshair
+            this.updateSelectedCrosshair();
+        },
+
         updateCanvasProperties() {
             
-            // update canvas size (make 2x larger for extra space while maintaining aspect ratio)
+            // update canvas size (make 10x larger for extra space while maintaining aspect ratio)
             this.svgElem.style('width', 10*this.imgElem.width);
             this.svgElem.style('height', 10*this.imgElem.height);
 
@@ -347,6 +384,7 @@ export default {
 
         createSamplePoints() {
             let self = this;
+            let showLines = false;
 
             // make data model points
             let nodes = this.inputStatus.nodes || [];
@@ -356,20 +394,22 @@ export default {
                 this.quadratData.randomSamplePointsRect(nodes, numOfSampleRows, numOfSampleCols)
             } else {
                 this.quadratData.randomSamplePointsPoly(nodes)
-                // let line = d3.line()
-                //     .x(d => (d.x * this.imgElem.width))
-                //     .y(d => (d.y * this.imgElem.height))
-                
-                // this.quadratData.cutLines.forEach((thisLine, iter) => {
+                if (showLines) {
+                    let line = d3.line()
+                        .x(d => (d.x * this.imgElem.width))
+                        .y(d => (d.y * this.imgElem.height))
+                    
+                    this.quadratData.cutLines.forEach((thisLine, iter) => {
 
-                //     this.svgElem.append('path')
-                //         .datum(thisLine)
-                //         .attr('d', line)
-                //         .attr('fill', 'none')
-                //         .attr('stroke', "yellow")
-                //         .attr('stroke-width', "0.5%")
+                        this.svgElem.append('path')
+                            .datum(thisLine)
+                            .attr('d', line)
+                            .attr('fill', 'none')
+                            .attr('stroke', "yellow")
+                            .attr('stroke-width', this.svgSizes.CUT_LINE_STROKE_WIDTH)
 
-                // })
+                    })
+                }
             }
 
             // update scene
@@ -406,11 +446,15 @@ export default {
             selection.merge(enterSelection)
                 .attr('cx', d => d.x * this.imgElem.width)
                 .attr('cy', d => d.y * this.imgElem.height)
-                .attr('r', "1%")
+                .attr('r', this.svgSizes.SAMPLE_CIRCLE_RADIUS)
+                .attr('stroke-width', this.svgSizes.CIRCLE_STROKE_WIDTH)
                 .attr('sampleNumber', d => d.sampleNumber)
                 // Dynamically set fill and stroke based on the currently selected sample
-                .attr('fill', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'green' : 'DarkOrchid')
-                .attr('stroke', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'darkgreen' : 'Purple');
+                .attr('fill', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'none' : 'orange')
+                .attr('stroke', d => d.sampleNumber === self.inputStatus.sampleNumber ? 'none' : 'darkorange');
+
+            // Handle crosshair for selected sample
+            this.updateSelectedCrosshair();
         },
 
         makeCircles() {
@@ -428,7 +472,8 @@ export default {
                     .attr('class', 'nodeCircle')
                     .attr('cx', data => data.x * this.imgElem.width)
                     .attr('cy', data => data.y * this.imgElem.height)
-                    .attr('r', "1%")
+                    .attr('r', this.svgSizes.NODE_CIRCLE_RADIUS)
+                    .attr('stroke-width', this.svgSizes.CIRCLE_STROKE_WIDTH)
                     .attr('fill', 'red')
 
             let line = d3.line()
@@ -440,7 +485,7 @@ export default {
                 .attr('d', line)
                 .attr('fill', 'none')
                 .attr('stroke', "red")
-                .attr('stroke-width', "0.5%")
+                .attr('stroke-width', this.svgSizes.LINE_STROKE_WIDTH)
 
             this.updateSamplePoints()
 
@@ -598,6 +643,44 @@ export default {
             } else {
                 document.body.style.cursor = 'default';
             }
+        },
+
+        updateSelectedCrosshair() {
+            if (!this.zoomableGroup || !this.quadratData.samples) return;
+            
+            // Remove existing crosshair
+            this.zoomableGroup.selectAll('.selectedCrosshair').remove();
+            
+            // Find the selected sample
+            const selectedSample = this.quadratData.samples.find(s => s.sampleNumber === this.inputStatus.sampleNumber);
+            if (!selectedSample) return;
+            
+            const x = selectedSample.x * this.imgElem.width;
+            const y = selectedSample.y * this.imgElem.height;
+            const length = this.svgSizes.CROSSHAIR_LENGTH;
+            const strokeWidth = this.svgSizes.CROSSHAIR_STROKE_WIDTH;
+            
+            // Create crosshair group
+            const crosshairGroup = this.zoomableGroup.append('g')
+                .attr('class', 'selectedCrosshair');
+            
+            // Horizontal line
+            crosshairGroup.append('line')
+                .attr('x1', x - length)
+                .attr('y1', y)
+                .attr('x2', x + length)
+                .attr('y2', y)
+                .attr('stroke', 'yellow')
+                .attr('stroke-width', strokeWidth);
+            
+            // Vertical line
+            crosshairGroup.append('line')
+                .attr('x1', x)
+                .attr('y1', y - length)
+                .attr('x2', x)
+                .attr('y2', y + length)
+                .attr('stroke', 'yellow')
+                .attr('stroke-width', strokeWidth);
         },
 
     }
