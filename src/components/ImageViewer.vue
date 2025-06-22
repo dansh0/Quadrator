@@ -17,9 +17,17 @@
                                             TODO: Add info here
                                         </p> -->
                                         <v-col class="d-flex flex-column align-center">
-                                            <v-btn color="primary" x-large @click="selectImage()" class="elevation-6">
+                                            <v-btn color="primary" x-large @click="selectImage()" class="elevation-6 mb-4 home-button">
                                                 <v-icon left>mdi-image-plus</v-icon>
                                                 Load Image
+                                            </v-btn>
+                                            <v-btn v-if="hasSavedSession" color="primary" large @click="loadLastSession()" class="elevation-6 mb-4 home-button">
+                                                <v-icon left>mdi-history</v-icon>
+                                                Continue Last Session
+                                            </v-btn>
+                                            <v-btn color="primary" large @click="$emit('trigger-load-session')" class="elevation-6 home-button">
+                                                <v-icon left>mdi-folder-open</v-icon>
+                                                Load from File
                                             </v-btn>
                                         </v-col>
                                         <p class="text-caption grey--text mb-1 mt-5">
@@ -52,6 +60,8 @@ import * as d3 from 'd3';
 const { ipcRenderer } = require('electron');
 const { version } = require('../../package.json');
 const fs = require('fs');
+import { Quadrat } from '../dataModel/quadrat.js';
+import { InputState } from '../InputState.js';
 
 export default {
     name: 'ImageViewer',
@@ -63,7 +73,8 @@ export default {
         svgElem: undefined,
         zoomableGroup: undefined, // Group element for zooming and panning
         imageAspect: undefined,
-        newImage: true
+        newImage: true,
+        hasSavedSession: false
     }),
     computed: {
         ...mapState([
@@ -151,12 +162,9 @@ export default {
         }
     },
     mounted() {
-
-        this.initImgElem()
-        if (this.imgPathList.length > 0) {
-            this.loadNewImage(this.imgPathList[0])
-        }
-
+        this.initImgElem();
+        // Check for a saved session on startup
+        this.hasSavedSession = !!localStorage.getItem('lastSession');
     },
     methods: {
         ...mapMutations([
@@ -164,7 +172,8 @@ export default {
             'NEW_QUADRAT',
             'SWAP_QUADRAT',
             'RESET_ALL',
-            'UPDATE_RUNNING_DATA'
+            'UPDATE_RUNNING_DATA',
+            'RESTORE_SESSION'
         ]),
         
 
@@ -242,6 +251,21 @@ export default {
         // --------------------
 
         async selectImage() {
+            // If a session exists, warn the user that loading a new image will overwrite it.
+            if (this.hasSavedSession) {
+                const lastSession = JSON.parse(localStorage.getItem('lastSession'));
+                if (lastSession.runningData.length > 0) {
+                    // Only warn if there is actually data saved
+                    const questionInfo = {
+                        title: "Overwrite Saved Session?",
+                        question: "Loading new images will overwrite your last saved session. Are you sure you want to continue?",
+                        buttons: ["No", "Yes"]
+                    };
+                    const confirmation = await ipcRenderer.invoke('question', questionInfo);
+                    if (!confirmation.response) { return; }
+                }
+            }
+
             let filePaths = await ipcRenderer.invoke('openFile')
             
             // if canceled, then quick action
@@ -255,6 +279,29 @@ export default {
             // load image if one is defined
             console.log("File Paths:", filePaths)
             this.loadNewImage(filePaths[0]);
+        },
+
+        async loadLastSession() {
+            const lastSessionJSON = localStorage.getItem('lastSession');
+            if (!lastSessionJSON) { return; }
+
+            try {
+                // The new utility will handle parsing and validation
+                const sessionState = JSON.parse(lastSessionJSON);
+                
+                this.RESTORE_SESSION(sessionState);
+
+                this.$nextTick(() => {
+                    this.loadExistingImage(sessionState.currentImgSrc);
+                });
+            } catch (error) {
+                console.error("Failed to load session:", error);
+                const { ipcRenderer } = require('electron');
+                ipcRenderer.invoke('alert', "Session could not be loaded. It may be corrupt. Please load new images to continue.");
+                
+                localStorage.removeItem('lastSession');
+                this.hasSavedSession = false;
+            }
         },
 
         loadNewImage(filePath) {
@@ -333,6 +380,9 @@ export default {
             // update scene
             this.updateSamplePoints();
 
+            // update running data with new quadrat
+            this.UPDATE_RUNNING_DATA();
+
         },
 
         updateSamplePoints() {
@@ -353,6 +403,8 @@ export default {
                 .attr('class', 'sampleCircle')
                 .on('click', (event, d) => {
                     self.inputStatus.sampleNumber = d.sampleNumber;
+                    // update running data with data from last sample
+                    self.UPDATE_RUNNING_DATA();
                 });
 
             // UPDATE existing elements and MERGE enter selection
@@ -586,5 +638,9 @@ export default {
 .v-container {
     position: relative;
     z-index: 1;
+}
+
+.home-button {
+    width: 275px;
 }
 </style>

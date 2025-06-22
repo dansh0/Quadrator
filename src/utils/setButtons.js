@@ -1,38 +1,36 @@
 const { ipcRenderer } = require('electron');
-const csv = require('csv-parser');
-const fs = require('fs');
+const { loadButtonsFromPath } = require('./buttonUtils');
 
 /**
- * Utility function to set buttons from a CSV file
- * @param {Array} buttons - Reference to the buttons array to update
- * @param {Function} alert - Function to show alerts to the user
+ * Opens a dialog for the user to select a CSV file,
+ * then loads the buttons and saves the path to localStorage.
+ * @param {Array} buttons - Reference to the buttons array to update.
+ * @param {Function} alert - Function to show alerts to the user.
  * @returns {Promise<void>}
  */
 async function setButtons(buttons, alert) {
     // Request CSV file selection
-    let filePath = await ipcRenderer.invoke('openFile', {
+    let filePaths = await ipcRenderer.invoke('openFile', {
         filters: [
             { name: 'CSV Files', extensions: ['csv'] }
-        ]
+        ],
+        properties: ['openFile']
     });
-    
+
     // If no file selected, return
-    if (!filePath || filePath.length === 0) return;
-    
-    // Clear existing buttons
-    buttons.length = 0;
-    
-    // Read and process the CSV file
-    fs.createReadStream(filePath[0])
-        .pipe(csv())
-        .on('data', (data) => buttons.push(data))
-        .on('end', () => {
-            console.log('CSV file successfully processed');
-        })
-        .on('error', (error) => {
-            console.error('Error processing CSV:', error);
-            alert('Error processing CSV file. Please try again.');
-        });
+    if (!filePaths || filePaths.length === 0) return;
+
+    const filePath = filePaths[0];
+
+    try {
+        await loadButtonsFromPath(filePath, buttons);
+        // On success, save the path to localStorage for persistence
+        localStorage.setItem('buttonsCSVPath', filePath);
+    } catch (error) {
+        alert('Error processing CSV file. Please check the file and try again.');
+        // If loading fails, remove any previously stored path
+        localStorage.removeItem('buttonsCSVPath');
+    }
 }
 
 module.exports = setButtons;

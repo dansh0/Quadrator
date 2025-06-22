@@ -66,22 +66,25 @@ async function createWindow() {
     });
 
     // Pops up an alert
-    ipcMain.handle('alert', (event, alertString) => {
-        
-        // alert user
-        dialog.showMessageBox(win, {message: alertString, type: 'error', title: 'Alert'})
-
-    });
+    ipcMain.handle('alert', (event, message) => {
+        dialog.showMessageBox(null, {
+            type: 'none',
+            title: 'Alert',
+            message: message,
+            buttons: ['OK']
+        })
+    })
 
     // Pops up an question
     ipcMain.handle('question', async (event, questionInfo) => {
+        let buttons = questionInfo.buttons ? questionInfo.buttons : ['Yes', 'No']
         
         // ask question
         let response = await dialog.showMessageBox(win, {
             message: questionInfo.question, 
             type: 'question', 
             title: questionInfo.title,
-            buttons: questionInfo.buttons
+            buttons: buttons
         })
 
         return response
@@ -93,7 +96,14 @@ async function createWindow() {
         win.webContents.reload();
     });
 
-    
+    ipcMain.handle('saveFile', async (event, options) => {
+        const { canceled, filePath } = await dialog.showSaveDialog(options);
+        if (canceled) {
+            return null;
+        } else {
+            return filePath;
+        }
+    });
 }
 
 // Quit when all windows are closed.

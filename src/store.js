@@ -9,7 +9,7 @@ Vue.use(Vuex)
 const defaultState = {
     count: 0,
     imgSrc: undefined,
-    imgPathList: [], //["C://Users//dshor//Documents//Github//Quadrator-Electron//src//assets//B3_1Y_T1.jpg"],
+    imgPathList: [],
     imgElem: document.createElement('img'),
     windowHelpers: {
         rightPanelWidth: 400,
@@ -85,7 +85,28 @@ const store = new Vuex.Store({
             // swap the editable and viewable quadrat with another from running data
             state.quadratData = swapData.quadratData;
             state.inputStatus = swapData.inputStatus;
+        },
+        RESTORE_SESSION(state, sessionState) {
+            // Restore the state from the saved session
+            state.imgPathList = sessionState.imgPathList;
+            state.runningData = sessionState.runningData;
 
+            // Find the correct data to make active
+            const currentImgIndex = state.imgPathList.indexOf(sessionState.currentImgSrc);
+            if (currentImgIndex !== -1 && state.runningData[currentImgIndex]) {
+                const activeData = state.runningData[currentImgIndex];
+                state.quadratData = activeData.quadratData;
+                state.inputStatus = activeData.inputStatus;
+                state.imgSrc = sessionState.currentImgSrc;
+            } else if (currentImgIndex !== -1) {
+                // Handle the edge case where the app was closed right after loading a new image,
+                // before its data was pushed to runningData.
+                state.imgSrc = sessionState.currentImgSrc;
+                // Create a new, valid Quadrat object for the restored image.
+                let numOfSamples = state.quadratSettings.numOfSampleRows * state.quadratSettings.numOfSampleCols;
+                state.quadratData = new Quadrat(numOfSamples, state.imgSrc);
+                state.inputStatus = new InputState();
+            }
         },
         CHANGE_IMG_SRC (state, imagePath) {
             state.imgSrc = imagePath;

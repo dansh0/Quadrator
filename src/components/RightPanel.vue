@@ -2,6 +2,7 @@
     <v-card id="card" :style="{'width':panelWidth}" color=tertiary height="100%" >
     <!-- <v-card min-width=400 color=tertiary width=400 height="100%" > -->
         <MenuButtons 
+            ref="menuButtons"
             @load-new-image="handleLoadNewImage"
             @load-existing-image="handleLoadExistingImage"
             @init-new-quadrat-svg="handleInitNewQuadratSVG"
@@ -58,6 +59,7 @@
 <script>
 import { mapState, mapMutations } from 'vuex';
 const setButtons = require('../utils/setButtons');
+import { loadButtonsFromPath } from '../utils/buttonUtils';
 import MenuButtons from './MenuButtons.vue';
 
 export default {
@@ -128,10 +130,12 @@ export default {
         }
     },
     mounted() {
-        this.enableHotKeys()
+        this.enableHotKeys();
+        this.loadButtonsOnStartup();
     },
     methods: {
         ...mapMutations([
+            'UPDATE_RUNNING_DATA'
         ]),
         buttonLabel(button) {
             let buttIndex = this.buttonCodes.indexOf(button);
@@ -152,6 +156,9 @@ export default {
                 this.inputStatus.sampleNumber += 1;
             }
 
+            // update running data with data from last sample
+            this.UPDATE_RUNNING_DATA();
+
             // update button selections
             this.updateToggles();
 
@@ -163,6 +170,9 @@ export default {
 
                 // update button selections
                 this.updateToggles();
+
+                // update running data with data from last sample
+                this.UPDATE_RUNNING_DATA();
 
             }
             
@@ -214,6 +224,29 @@ export default {
         },
         async handleSetButtons() {
             await setButtons(this.buttons, this.alert);
+        },
+        triggerSaveSession() {
+            if (this.$refs.menuButtons) {
+                this.$refs.menuButtons.saveSession();
+            }
+        },
+        triggerLoadSessionFromFile() {
+            if (this.$refs.menuButtons) {
+                this.$refs.menuButtons.loadSession();
+            }
+        },
+        async loadButtonsOnStartup() {
+            const savedPath = localStorage.getItem('buttonsCSVPath');
+            if (savedPath) {
+                try {
+                    await loadButtonsFromPath(savedPath, this.buttons);
+                    console.log(`Successfully loaded buttons from saved path: ${savedPath}`);
+                } catch (error) {
+                    this.alert(`Failed to load button configuration from the saved path: ${savedPath}. The file may have been moved or deleted. Please select it again.`);
+                    // Clear the invalid path from storage
+                    localStorage.removeItem('buttonsCSVPath');
+                }
+            }
         },
 
         // Handle events from MenuButtons component

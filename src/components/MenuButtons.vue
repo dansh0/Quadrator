@@ -16,6 +16,7 @@ import { mapState, mapMutations } from 'vuex';
 const { ipcRenderer } = require('electron');
 import { exportDataToCSV } from '../utils/exportUtils';
 import setButtons from '../utils/setButtons';
+import { getSessionState, saveSessionToFile, loadSessionFromFile } from '../utils/sessionUtils';
 
 export default {
     name: 'MenuButtons',
@@ -33,6 +34,16 @@ export default {
                     btnText: 'Start Over',
                     btnFunc: this.fullReset,
                     btnTooltip: 'Delete all unsaved data and restart'
+                },
+                {
+                    btnText: 'Load Session',
+                    btnFunc: this.loadSession,
+                    btnTooltip: 'Load a previously saved session from a file'
+                },
+                {
+                    btnText: 'Save Session',
+                    btnFunc: this.saveSession,
+                    btnTooltip: 'Save the current session to a file'
                 },
                 {
                     btnText: 'Load Image',
@@ -67,8 +78,61 @@ export default {
             'CHANGE_IMG_SRC',
             'NEW_QUADRAT',
             'SWAP_QUADRAT',
-            'UPDATE_RUNNING_DATA'
+            'UPDATE_RUNNING_DATA',
+            'RESTORE_SESSION'
         ]),
+
+        async saveSession() {
+            try {
+                const filePath = await ipcRenderer.invoke('saveFile', {
+                    filters: [{ name: 'JSON Files', extensions: ['json'] }]
+                });
+
+                if (filePath) {
+                    // update running data list
+                    this.UPDATE_RUNNING_DATA();
+
+                    const sessionState = getSessionState(this.$store);
+                    await saveSessionToFile(filePath, sessionState);
+                }
+            } catch (error) {
+                console.error('Failed to save session:', error);
+                this.alert(`Error saving session: ${error.message}`);
+            }
+        },
+
+        async loadSession() {
+            if (this.runningData.length > 0) {
+                // only warn if there is actually data saved
+                const questionInfo = {
+                    title: "Confirm Load Session",
+                    question: "Loading a session will overwrite your current progress. Are you sure you want to continue?",
+                    buttons: ["No", "Yes"]
+                };
+                const confirmation = await ipcRenderer.invoke('question', questionInfo);
+                if (!confirmation.response) { return; }
+            }
+
+            try {
+                const filePaths = await ipcRenderer.invoke('openFile', {
+                    filters: [{ name: 'JSON Files', extensions: ['json'] }],
+                    properties: ['openFile']
+                });
+
+                if (filePaths && filePaths.length > 0) {
+                    const filePath = filePaths[0];
+                    const sessionState = await loadSessionFromFile(filePath);
+                    this.RESTORE_SESSION(sessionState);
+                    
+                    this.$nextTick(() => {
+                        this.$emit('load-existing-image', this.$store.state.imgSrc);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load session:', error);
+                this.alert(`Error loading session: ${error.message}`);
+            }
+        },
 
         async fullReset() {
             let questionInfo = {
@@ -78,6 +142,9 @@ export default {
             };
             let confirmation = await ipcRenderer.invoke('question', questionInfo);
             if (!confirmation.response) { return }
+
+            // Clear the local storage
+            localStorage.removeItem('lastSession');
                 
             ipcRenderer.invoke('reload')
         },
