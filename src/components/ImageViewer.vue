@@ -133,8 +133,7 @@ export default {
             }
         },
         isGeoDefined: function() {
-            if (!this.quadratData.samples) return false;
-            return this.quadratData.samples.filter(sample => (!!sample.x && !!sample.y)).length > 0
+            return this.quadratData.geoDefined;
         }
     },
     watch: {
@@ -184,7 +183,8 @@ export default {
             'SWAP_QUADRAT',
             'RESET_ALL',
             'UPDATE_RUNNING_DATA',
-            'RESTORE_SESSION'
+            'RESTORE_SESSION',
+            'SET_ACTIVE_TAB'
         ]),
         
 
@@ -440,6 +440,7 @@ export default {
                     self.inputStatus.sampleNumber = d.sampleNumber;
                     // update running data with data from last sample
                     self.UPDATE_RUNNING_DATA();
+                    self.SET_ACTIVE_TAB(1);
                 });
 
             // UPDATE existing elements and MERGE enter selection
@@ -525,6 +526,7 @@ export default {
             if (this.quadratData.samples) {
                 this.quadratData.resetSamples();
             }
+            this.quadratData.geoDefined = false;
 
             // update canvas with new image
             this.updateCanvasProperties()
@@ -560,6 +562,8 @@ export default {
 
                             // start sample selection
                             self.createSamplePoints()
+
+                            self.quadratData.geoDefined = true;
                             return
                         }
                     }
@@ -588,6 +592,8 @@ export default {
 
                     // start sample selection
                     self.createSamplePoints()
+
+                    self.quadratData.geoDefined = true;
                 } else {
 
                     self.makeCircles();

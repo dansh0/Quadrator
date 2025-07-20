@@ -11,8 +11,9 @@ class Quadrat {
         this.numOfSamples = numOfSamples;
         this.imgSrc = imgSrc;
         this.samples = [];
-        this.name = path.parse(imgSrc).name
-        this.cutLines = []
+        this.name = path.parse(imgSrc).name;
+        this.cutLines = [];
+        this.geoDefined = false;
         this.initSamples();
     }
 
@@ -31,7 +32,7 @@ class Quadrat {
     }
 
     initSamples() {
-        for (let iSample=0; iSample<this.numOfSamples; iSample++) {
+        for (let iSample = 0; iSample < this.numOfSamples; iSample++) {
             this.samples.push(new Sample())
         }
     }
@@ -49,13 +50,13 @@ class Quadrat {
             if (index != nodes.length - 1) {
                 let line = [node, nodes[index + 1]];
                 let edgeNodes = [];
-                let nodeCount = index%2==0 ? numOfSampleRows : numOfSampleCols;
+                let nodeCount = index % 2 == 0 ? numOfSampleRows : numOfSampleCols;
                 let stepX = (line[1].x - line[0].x) / (nodeCount)
-                let edgeNodesX = range(line[0].x, line[1].x + stepX*0.5, stepX )
+                let edgeNodesX = range(line[0].x, line[1].x + stepX * 0.5, stepX)
                 let stepY = (line[1].y - line[0].y) / (nodeCount)
-                let edgeNodesY = range(line[0].y, line[1].y + stepY*0.5, stepY )
+                let edgeNodesY = range(line[0].y, line[1].y + stepY * 0.5, stepY)
                 edgeNodesX.forEach((edgeNodeX, index) => {
-                    edgeNodes.push({x: edgeNodeX, y: edgeNodesY[index]})
+                    edgeNodes.push({ x: edgeNodeX, y: edgeNodesY[index] })
                 })
                 edgesNodes.push(edgeNodes)
             }
@@ -90,7 +91,7 @@ class Quadrat {
                         this.samples[sampleNumber].x = lineNodeX1.x + ySamplePos * (lineNodeX2.x - lineNodeX1.x)
                         this.samples[sampleNumber].y = lineNodeX1.y + ySamplePos * (lineNodeX2.y - lineNodeX1.y)
                         this.samples[sampleNumber].sampleNumber = sampleNumber
-                        
+
                     }
                 })
             }
@@ -105,9 +106,9 @@ class Quadrat {
         this.polygons = new Array();
         this.polygons.push(new Polygon());
         nodes.forEach((node, iter) => {
-            if (iter != nodes.length-1) {
+            if (iter != nodes.length - 1) {
                 // last is same as first, push all others
-                this.polygons[0].push_back(new Vector(node.x*multiplier, node.y*multiplier, 0))
+                this.polygons[0].push_back(new Vector(node.x * multiplier, node.y * multiplier, 0))
             }
         })
 
@@ -117,10 +118,10 @@ class Quadrat {
 
         // cut for each sample
         let cutRet;
-        for (let iSample=0; iSample<this.numOfSamples-1; iSample++) {
+        for (let iSample = 0; iSample < this.numOfSamples - 1; iSample++) {
             cutRet = this.polygons[iSample].split(cutArea)
             if (cutRet.value == 1) {
-                this.cutLines.push([{x:cutRet.cutLine.start.x/multiplier, y:cutRet.cutLine.start.y/multiplier}, {x:cutRet.cutLine.end.x/multiplier, y:cutRet.cutLine.end.y/multiplier}])
+                this.cutLines.push([{ x: cutRet.cutLine.start.x / multiplier, y: cutRet.cutLine.start.y / multiplier }, { x: cutRet.cutLine.end.x / multiplier, y: cutRet.cutLine.end.y / multiplier }])
                 let size1 = cutRet.poly1.countSquare()
                 let size2 = cutRet.poly2.countSquare()
                 if (size1 < size2) {
@@ -142,7 +143,7 @@ class Quadrat {
 
             // get bbox
             poly.bbox = this._getPolygonBBox(poly);
-           
+
             // test if a random point is inside the poly, repeat randomizer if not
             let inside = false
             let failTry = 0
@@ -170,8 +171,8 @@ class Quadrat {
 
     _getPolygonBBox(polygon) {
         let bbox = {
-            min: {x: 0, y:0, z:0},
-            max: {x: Infinity, y: Infinity, z: Infinity}
+            min: { x: 0, y: 0, z: 0 },
+            max: { x: Infinity, y: Infinity, z: Infinity }
         }
 
         polygon.poly.arrVector.forEach(vect => {
@@ -204,7 +205,7 @@ class Quadrat {
                     let codeSpecies = speciesList[codeIndex].species;
                     let codeGroup = speciesList[codeIndex].group1 + ' - ' + speciesList[codeIndex].group2;
                     // init at count of 1
-                    codes[code] = {count: 1, species: codeSpecies, group: codeGroup}
+                    codes[code] = { count: 1, species: codeSpecies, group: codeGroup }
                 }
             })
         })
@@ -218,7 +219,7 @@ class Quadrat {
 
             // make array of line elements
             let line = [this.name, this.imgSrc, dateString, code, codes[code].species, codes[code].group, codes[code].count, coverage]
-            
+
             // make csv line
             let lineOut = ""
             line.forEach(item => {
@@ -229,7 +230,7 @@ class Quadrat {
             appendOut += lineOut
         })
 
-        
+
         // combine lines
 
         return appendOut

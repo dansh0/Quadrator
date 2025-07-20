@@ -3,8 +3,8 @@
         <!-- Tabs -->
         <v-tabs v-model="localTab" background-color="primary" dark dense>
             <v-tab key="0">Image Prep</v-tab>
-            <v-tab key="1">Species ID</v-tab>
-            <v-tab key="2">Data Review</v-tab>
+            <v-tab key="1" :disabled="!isGeoDefined">Species ID</v-tab>
+            <v-tab key="2" :disabled="!isGeoDefined">Data Review</v-tab>
         </v-tabs>
         <v-tabs-items v-model="localTab">
             <v-tab-item key="0">
@@ -43,7 +43,8 @@ export default {
         ...mapState([
             'imgSrc',
             'windowHelpers',
-            'activeTab'
+            'activeTab',
+            'quadratData'
         ]),
         panelWidth() {
             return this.windowHelpers.rightPanelWidth + 'px';
@@ -54,8 +55,15 @@ export default {
                 return this.activeTab;
             },
             set(val) {
+                // If geometry is not defined, restrict to tab 0
+                if (!this.isGeoDefined && val > 0) {
+                    val = 0;
+                }
                 this.SET_ACTIVE_TAB(val);
             }
+        },
+        isGeoDefined() {
+            return this.quadratData && this.quadratData.geoDefined;
         }
     },
     methods: {
