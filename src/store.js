@@ -16,6 +16,8 @@ const defaultState = {
         leftPanelWidth: 300,
         height: 400
     },
+    // Added global state for active tab in RightPanel (0 = Image Prep, 1 = Species, 2 = QA)
+    activeTab: 0,
     buttons: [],
     hotKeys: [
         "q",
@@ -115,6 +117,10 @@ const store = new Vuex.Store({
         },
         CHANGE_IMG_SRC (state, imagePath) {
             state.imgSrc = imagePath;
+        },
+        // NEW MUTATION: change active tab in RightPanel
+        SET_ACTIVE_TAB(state, tabIndex) {
+            state.activeTab = tabIndex;
         },
         // RESET_ALL(state) {
         //     // TODO: pull out all preferences from default state into preference file to avoid overwriting
