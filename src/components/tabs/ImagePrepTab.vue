@@ -58,7 +58,7 @@
         </v-row> -->
         <v-alert type="info" dense outlined v-if="!quadratData.geoDefined" class="ma-4">
             Begin by defining the quadrat geometry by clicking on the image at corners of the desired quadrat or polygon. Reselect the first point to complete the quadrat geometry.
-        </v-alert>  
+        </v-alert>
     </v-container>
 </template>
 

@@ -28,6 +28,7 @@ class Quadrat {
         quadrat.samples = savedData.samples || [];
         quadrat.cutLines = savedData.cutLines || [];
         quadrat.polygons = savedData.polygons || [];
+        quadrat.geoDefined = savedData.geoDefined || false;
         return quadrat;
     }
 

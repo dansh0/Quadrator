@@ -1,5 +1,18 @@
 <template>
     <v-container fluid class="pa-0 pt-4">
+        <v-container grid-list-md v-if="buttons.length === 0" class="pa-0">
+            <v-row class="justify-center my-2">
+                <v-alert v-if="buttons.length === 0" type="info" dense outlined class="ma-4">
+                    No buttons loaded. Please load buttons from a CSV file.
+                </v-alert>
+            </v-row>            
+            <v-row class="justify-center my-2">
+                <v-btn large color="primary" class="black--text" @click="downloadTemplate">Download Template</v-btn>
+            </v-row>
+            <v-row class="justify-center my-2">
+                <v-btn large color="primary" class="black--text" @click="handleSetButtons">Edit Buttons</v-btn>
+            </v-row>
+        </v-container>
         <!-- Button grid / toggles -->
         <v-btn-toggle multiple background-color="tertiary" @change="updateSamples" v-model="toggles">
             <v-container grid-list-md class="pa-2">
@@ -31,10 +44,7 @@
             <v-card-text align="center" class="justify-center my-2 pa-0">
                 Point {{ inputStatus.sampleNumber + 1 }} of {{ numOfSamples }}
             </v-card-text>
-            <v-container v-if="buttons.length === 0" class="d-flex justify-center my-2 pa-0">
-                <v-btn x-large color="primary" class="black--text" @click="handleSetButtons">Edit Buttons</v-btn>
-            </v-container>
-            <v-container v-else class="d-flex justify-center my-2 pa-0">
+            <v-container v-if="buttons.length > 0" class="d-flex justify-center my-2 pa-0">
                 <v-btn small color="primary" class="black--text" @click="handleSetButtons">Edit Buttons</v-btn>
             </v-container>
             <v-row class="justify-center my-2 pa-0">
@@ -45,9 +55,13 @@
 </template>
 
 <script>
+/* global __static */
 import { mapState, mapMutations } from 'vuex';
 const setButtons = require('../../utils/setButtons');
 import { loadButtonsFromPath } from '../../utils/buttonUtils';
+import { ipcRenderer } from 'electron';
+import fs from 'fs';
+import path from 'path';
 
 export default {
     name: 'SpeciesInputTab',
@@ -174,6 +188,38 @@ export default {
                     );
                     localStorage.removeItem('buttonsCSVPath');
                 }
+            }
+        },
+        async downloadTemplate() {
+            try {
+                // Resolve the path to the bundled template file.
+                // In development, this points to the src folder; in production `__static` is provided by electron-builder.
+                const TEMPLATE_RELATIVE = path.join('assets', 'buttons_template.csv');
+                const templatePath = process.env.NODE_ENV === 'production'
+                    ? path.join(__static, TEMPLATE_RELATIVE) // TEST!
+                    : path.join(__dirname, '../../../../../../src/assets', 'buttons_template.csv');
+                
+                // Ask the user where to save the file, pre-filling the name as buttons.csv
+                const filePath = await ipcRenderer.invoke('saveFile', {
+                    title: 'Save Buttons Template',
+                    defaultPath: 'buttons.csv',
+                    buttonLabel: 'Save',
+                    filters: [{ name: 'CSV', extensions: ['csv'] }]
+                });
+
+                // If the user cancelled the dialog, filePath will be null
+                if (!filePath) return;
+
+                // Copy the template file to the chosen destination
+                fs.copyFile(templatePath, filePath, (err) => {
+                    if (err) {
+                        this.alert(`Failed to save template: ${err.message}`);
+                    } else {
+                        this.alert('Template saved successfully.');
+                    }
+                });
+            } catch (error) {
+                this.alert(`Unexpected error: ${error.message}`);
             }
         }
     }

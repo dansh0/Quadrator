@@ -29,7 +29,8 @@ function loadButtonsFromPath(filePath, buttons) {
             .on('data', (data) => newButtons.push(data))
             .on('end', () => {
                 // Replace the content of the original array without changing the reference
-                buttons.splice(0, buttons.length, ...newButtons);
+                buttons.splice(0, buttons.length, ...newButtons.filter(button => !!button.species));
+                console.log(buttons);
                 console.log('CSV file successfully processed from', filePath);
                 resolve();
             })

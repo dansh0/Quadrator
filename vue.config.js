@@ -5,7 +5,9 @@
 // })
 
 module.exports = {
-    publicPath: "/",
+    // In an electron build we need relative paths so font & image assets resolve correctly.
+    // Use absolute path during web dev for dev-server, switch to relative path for production builds.
+    publicPath: process.env.NODE_ENV === 'production' ? './' : '/',
     transpileDependencies: [
         "vuetify"
     ],
@@ -13,10 +15,16 @@ module.exports = {
         electronBuilder: {
             nodeIntegration: true,
             builderOptions: {
-                "extraResources": [{
-                    "from": "./src/assets/buttons.csv",
-                    "to": "./buttons.csv"
-                }],
+                "extraResources": [
+                    {
+                        "from": "./src/assets/buttons.csv",
+                        "to": "./buttons.csv"
+                    },
+                    {
+                        "from": "./src/assets/buttons_template.csv",
+                        "to": "./buttons_template.csv"
+                    }
+                ],
                 "win": {
                     "icon": "src/assets/favicon.ico",
                     "target": [

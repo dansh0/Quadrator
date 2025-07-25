@@ -7,8 +7,10 @@
                 </v-alert>
             </template>
         </v-data-table>
-
-        <v-row justify="end" class="d-flex justify-center mt-10 pa-0">
+        <v-alert type="info" dense outlined class="ma-4">
+            Review and verify species for each quadrat point above. When finished, click below to export the coverage data.
+        </v-alert>
+        <v-row justify="end" class="d-flex justify-center mt-4 pa-0">
             <v-btn color="primary" @click="exportCsv">
                 <v-icon left>mdi-download</v-icon> Export Results
             </v-btn>

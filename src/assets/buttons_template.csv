@@ -1,0 +1,44 @@
+code,species,group1,group2,color,colorSelected
+Anom,Anthopleura_sp,Animal,Intertidal sessile,#9c27b0,#7c1790
+Barn,Cirripedia_spp,Animal,Intertidal sessile,#9c27b0,#7c1791
+Asc,Polycarpa sp.,Animal,Intertidal sessile,#9c27b0,#7c1792
+Spon,Haliclona sp.,Animal,Intertidal sessile,#9c27b0,#7c1793
+Oys,Saccostrea scyphophilla,Animal,Intertidal sessile,#9c27b0,#7c1794
+Colo,Other colonial,Animal,Intertidal sessile,#9c27b0,#7c1795
+Tube,Tubeworm,Animal,Intertidal sessile,#9c27b0,#7c1796
+Eggs,Snail eggs,Animal,Intertidal sessile,#9c27b0,#7c1797
+Limp,Limpets,Animal,Intertidal sessile,#9c27b0,#7c1797
+Cyan,Cyanobacteria,Film,Algae,#00bcd4,#00acc4
+Sarg,Sargassum spp. ,Brown,Algae,#795548,#694538
+Pad,Padina,Brown,Algae,#795548,#694538
+Lob,Lobophora variegata,Brown,Algae,#795548,#694538
+Dita,Dictoyota,Brown,Algae,#795548,#694538
+Dips,Dictyopteris,Brown,Algae,#795548,#694538
+Neo,Neomeris sp.,Green,Algae,#00c853,#00a833
+Bry,Bryopsis sp.,Green,Algae,#00c853,#00a833
+Chae,Chaetomorpha antennina,Green,Algae,#00c853,#00a833
+Caul,Caulerpa verticillata,Green,Algae,#00c853,#00a833
+Codi,Codium,Green,Algae,#00c853,#00a833
+Hali,Halimeda,Green,Algae,#00c853,#00a833
+Hyp,Hypnea caespitosa/pannosa,Red,Algae,#f44336,#c43326
+Pey,Peysonnelia rubra,Encrusting,Algae,#2196f3,#1576dd
+Ralf,Ralfsiales/Neoralfsiacae,Encrusting,Algae,#2196f3,#1576dd
+Cor,Corralina,Encrusting,Algae,#2196f3,#1576dd
+Hydr,Hydrolithon farinosum,Encrusting,Algae,#2196f3,#1576dd
+EAM,EAM,Turf,Algae,#ffeb3b,#ddcb2b
+Sed,Sediment,Other,Other,#9e9e9e,#7e7e7e
+Bare,Bare space,Other,Other,#9e9e9e,#7e7e7e
+?#1,Unknown Species #1,Other,Other,#9e9e9e,#7e7e7e
+?#2,Unknown Species #2,Other,Other,#9e9e9e,#7e7e7e
+?#3,Unknown Species #3,Other,Other,#9e9e9e,#7e7e7e
+
+// INSTRUCTIONS (Delete this line and all below)
+// List your species list as in the example above
+// Once completed remove these comments and save as csv - then load csv in Quadrator
+// Columns:
+// code - Short code to present on the button - limit to <= 5 letters
+// species - Full species name (visible on hover)
+// group1 - Optional group information - use empty cell to skip
+// group2 - Second optional group information - use empty cell to skip
+// color - The button color when not selected - recommended to use example colors above
+// colorSelected - The button color when selected - recommended to use example colors above
