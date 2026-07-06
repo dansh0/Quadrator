@@ -198,8 +198,14 @@ export default {
             if (!filePath.filePath) { return }
 
             console.log("Export Path:", filePath.filePath)
-            
-            await exportDataToCSV(filePath.filePath, this.runningData, this.buttons);
+
+            try {
+                await exportDataToCSV(filePath.filePath, this.runningData, this.buttons);
+                this.alert('Data exported successfully.');
+            } catch (error) {
+                console.error('Export failed:', error);
+                this.alert(`Export failed: ${error.message}. Make sure the file is not open in another program.`);
+            }
         },
 
         async exportQAReport() {

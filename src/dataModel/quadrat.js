@@ -1,9 +1,16 @@
-const path = require('path')
 import { range } from 'd3';
 import Polygon from '../assets/poly-split-js-master/src/Polygon.js';
 import Vector from '../assets/poly-split-js-master/src/Vector.js';
 // import Line from '../assets/poly-split-js-master/src/Line.js';
-const { ipcRenderer } = require('electron');
+import { ipcRenderer } from 'electron';
+
+// File base name without extension. Handles both Windows and POSIX separators,
+// so sessions saved on one OS keep their quadrat names on another.
+function imageBaseName(filePath) {
+    const base = String(filePath).split(/[\\/]/).pop();
+    const dot = base.lastIndexOf('.');
+    return dot > 0 ? base.slice(0, dot) : base;
+}
 
 class Quadrat {
 
@@ -11,7 +18,7 @@ class Quadrat {
         this.numOfSamples = numOfSamples;
         this.imgSrc = imgSrc;
         this.samples = [];
-        this.name = path.parse(imgSrc).name;
+        this.name = imageBaseName(imgSrc);
         this.cutLines = [];
         this.geoDefined = false;
         this.initSamples();
@@ -24,7 +31,7 @@ class Quadrat {
      */
     static quadratFromSavedData(savedData) {
         const quadrat = new Quadrat(savedData.numOfSamples, savedData.imgSrc);
-        quadrat.name = savedData.name || path.parse(savedData.imgSrc).name;
+        quadrat.name = savedData.name || imageBaseName(savedData.imgSrc);
         quadrat.samples = savedData.samples || [];
         quadrat.cutLines = savedData.cutLines || [];
         quadrat.polygons = savedData.polygons || [];
@@ -188,6 +195,16 @@ class Quadrat {
         return bbox;
     }
 
+    // Quote a value for CSV output (commas, quotes, or newlines in species/group
+    // names or file paths would otherwise shift every following column)
+    static _csvEscape(value) {
+        const str = String(value === undefined || value === null ? '' : value);
+        if (/[",\n\r]/.test(str)) {
+            return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+    }
+
     toCSV(speciesList) {
 
         // get date
@@ -203,10 +220,16 @@ class Quadrat {
                 } else {
                     // find species name
                     let codeIndex = speciesList.map(spec => spec.code).indexOf(code)
-                    let codeSpecies = speciesList[codeIndex].species;
-                    let codeGroup = speciesList[codeIndex].group1 + ' - ' + speciesList[codeIndex].group2;
-                    // init at count of 1
-                    codes[code] = { count: 1, species: codeSpecies, group: codeGroup }
+                    if (codeIndex === -1) {
+                        // code was tagged but is missing from the current species list
+                        // (e.g. the buttons CSV changed since tagging) - export it anyway
+                        codes[code] = { count: 1, species: 'UNKNOWN CODE', group: '' }
+                    } else {
+                        let codeSpecies = speciesList[codeIndex].species;
+                        let codeGroup = speciesList[codeIndex].group1 + ' - ' + speciesList[codeIndex].group2;
+                        // init at count of 1
+                        codes[code] = { count: 1, species: codeSpecies, group: codeGroup }
+                    }
                 }
             })
         })
@@ -221,21 +244,10 @@ class Quadrat {
             // make array of line elements
             let line = [this.name, this.imgSrc, dateString, code, codes[code].species, codes[code].group, codes[code].count, coverage]
 
-            // make csv line
-            let lineOut = ""
-            line.forEach(item => {
-                lineOut += item + ','
-            })
-            lineOut += '\n'
-
-            appendOut += lineOut
+            appendOut += line.map(Quadrat._csvEscape).join(',') + '\n'
         })
 
-
-        // combine lines
-
         return appendOut
-
 
     }
 }

@@ -136,9 +136,16 @@ export default {
             localStorage.setItem('hotKeySwitch', this.hotKeySwitch);
         },
         hotKeyFunc(event) {
-            if (event.keyCode === 39 || event.keyCode === 13) {
+            // Ignore hotkeys while the user is typing in a text field (e.g. Quadrat Name),
+            // otherwise typing silently toggles species codes and moves the sample cursor
+            const target = event.target;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                return;
+            }
+
+            if (event.key === 'ArrowRight' || event.key === 'Enter') {
                 this.nextSample();
-            } else if (event.keyCode === 37 || event.keyCode === 8) {
+            } else if (event.key === 'ArrowLeft' || event.key === 'Backspace') {
                 this.prevSample();
             } else if (
                 this.toggles &&
@@ -152,8 +159,8 @@ export default {
                 } else {
                     this.toggles.splice(this.toggles.indexOf(buttonIndex), 1);
                 }
+                this.updateSamples();
             }
-            this.updateSamples();
         },
         updateSamples() {
             // reset list without losing reference
