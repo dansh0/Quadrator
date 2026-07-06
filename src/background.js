@@ -97,7 +97,7 @@ async function createWindow() {
     });
 
     ipcMain.handle('saveFile', async (event, options) => {
-        const { canceled, filePath } = await dialog.showSaveDialog(options);
+        const { canceled, filePath } = await dialog.showSaveDialog(win, options);
         if (canceled) {
             return null;
         } else {

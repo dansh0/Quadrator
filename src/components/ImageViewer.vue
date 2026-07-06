@@ -59,6 +59,7 @@ import { mapState, mapMutations } from 'vuex';
 import * as d3 from 'd3';
 const { ipcRenderer } = require('electron');
 const { version } = require('../../package.json');
+const { pathToFileURL } = require('url');
 const fs = require('fs');
 import { Quadrat } from '../dataModel/quadrat.js';
 import { InputState } from '../InputState.js';
@@ -325,7 +326,7 @@ export default {
             this.NEW_QUADRAT();
 
             this.newImage = true;
-            this.imgElem.src = this.imgSrc;
+            this.imgElem.src = this.toImageURL(this.imgSrc);
 
             console.log(this.imgPathList)
         },
@@ -338,7 +339,20 @@ export default {
             // update only the image src
             this.CHANGE_IMG_SRC(filePath);
             this.newImage = false;
-            this.imgElem.src = this.imgSrc;
+            this.imgElem.src = this.toImageURL(this.imgSrc);
+        },
+
+        // Filesystem paths must be converted to file:// URLs before being used
+        // as an image src. A raw path only works by accident on Windows (drive
+        // letters parse as a URL scheme); on Linux/macOS it resolves relative
+        // to the page origin and 404s.
+        toImageURL(filePath) {
+            if (/^(file|https?|data|blob):/.test(filePath)) { return filePath; }
+            try {
+                return pathToFileURL(filePath).href;
+            } catch (e) {
+                return filePath;
+            }
         },
 
 
@@ -368,7 +382,11 @@ export default {
         },
 
         updateCanvasProperties() {
-            
+
+            // the SVG canvas is only initialized once the image has loaded;
+            // resize watchers can fire before that
+            if (!this.svgElem || !this.svgImage) { return; }
+
             // update canvas size (make 10x larger for extra space while maintaining aspect ratio)
             this.svgElem.style('width', 10*this.imgElem.width);
             this.svgElem.style('height', 10*this.imgElem.height);

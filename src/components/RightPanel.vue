@@ -79,16 +79,6 @@ export default {
         },
         handleInitNewQuadratSVG() {
             this.$emit('init-new-quadrat-svg');
-        },
-        triggerSaveSession() {
-            if (this.$refs.imagePrepTab && this.$refs.imagePrepTab.$refs.menuButtons) {
-                this.$refs.imagePrepTab.$refs.menuButtons.saveSession();
-            }
-        },
-        triggerLoadSessionFromFile() {
-            if (this.$refs.imagePrepTab && this.$refs.imagePrepTab.$refs.menuButtons) {
-                this.$refs.imagePrepTab.$refs.menuButtons.loadSession();
-            }
         }
     }
 }

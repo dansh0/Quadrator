@@ -14,9 +14,9 @@
 <script>
 import { mapState, mapMutations } from 'vuex';
 const { ipcRenderer } = require('electron');
-import { exportDataToCSV } from '../utils/exportUtils';
+import { exportDataInteractive } from '../utils/exportUtils';
 import setButtons from '../utils/setButtons';
-import { getSessionState, saveSessionToFile, loadSessionFromFile } from '../utils/sessionUtils';
+import { saveSessionInteractive, loadSessionInteractive } from '../utils/sessionUtils';
 
 export default {
     name: 'MenuButtons',
@@ -89,17 +89,7 @@ export default {
 
         async saveSession() {
             try {
-                const filePath = await ipcRenderer.invoke('saveFile', {
-                    filters: [{ name: 'JSON Files', extensions: ['json'] }]
-                });
-
-                if (filePath) {
-                    // update running data list
-                    this.UPDATE_RUNNING_DATA();
-
-                    const sessionState = getSessionState(this.$store);
-                    await saveSessionToFile(filePath, sessionState);
-                }
+                await saveSessionInteractive(this.$store);
             } catch (error) {
                 console.error('Failed to save session:', error);
                 this.alert(`Error saving session: ${error.message}`);
@@ -107,28 +97,9 @@ export default {
         },
 
         async loadSession() {
-            if (this.runningData.length > 0) {
-                // only warn if there is actually data saved
-                const questionInfo = {
-                    title: "Confirm Load Session",
-                    question: "Loading a session will overwrite your current progress. Are you sure you want to continue?",
-                    buttons: ["No", "Yes"]
-                };
-                const confirmation = await ipcRenderer.invoke('question', questionInfo);
-                if (!confirmation.response) { return; }
-            }
-
             try {
-                const filePaths = await ipcRenderer.invoke('openFile', {
-                    filters: [{ name: 'JSON Files', extensions: ['json'] }],
-                    properties: ['openFile']
-                });
-
-                if (filePaths && filePaths.length > 0) {
-                    const filePath = filePaths[0];
-                    const sessionState = await loadSessionFromFile(filePath);
-                    this.RESTORE_SESSION(sessionState);
-                    
+                const loaded = await loadSessionInteractive(this.$store);
+                if (loaded) {
                     this.$nextTick(() => {
                         this.$emit('load-existing-image', this.$store.state.imgSrc);
                     });
@@ -189,19 +160,11 @@ export default {
         },
 
         async exportData() {
-            // update running data list
-            this.UPDATE_RUNNING_DATA();
-
-            let filePath = await ipcRenderer.invoke('appendFile');
-
-            // quit if file select was canceled
-            if (!filePath.filePath) { return }
-
-            console.log("Export Path:", filePath.filePath)
-
             try {
-                await exportDataToCSV(filePath.filePath, this.runningData, this.buttons);
-                this.alert('Data exported successfully.');
+                const exported = await exportDataInteractive(this.$store);
+                if (exported) {
+                    this.alert('Data exported successfully.');
+                }
             } catch (error) {
                 console.error('Export failed:', error);
                 this.alert(`Export failed: ${error.message}. Make sure the file is not open in another program.`);

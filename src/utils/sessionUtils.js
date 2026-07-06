@@ -1,6 +1,5 @@
 import { promises as fs } from 'fs';
-import { Quadrat } from '../dataModel/quadrat.js';
-import { InputState } from '../InputState.js';
+import { ipcRenderer } from 'electron';
 
 /**
  * Gathers the current session state from the Vuex store.
@@ -46,4 +45,56 @@ async function loadSessionFromFile(filePath) {
     return sessionState;
 }
 
-export { getSessionState, saveSessionToFile, loadSessionFromFile }; 
+/**
+ * Full interactive save flow: ask for a target file, then write the session.
+ * Callable from anywhere with store access (menu button, Ctrl+S, ...).
+ * @param {object} store - The Vuex store instance.
+ * @returns {Promise<boolean>} true if saved, false if the dialog was cancelled.
+ */
+async function saveSessionInteractive(store) {
+    const filePath = await ipcRenderer.invoke('saveFile', {
+        filters: [{ name: 'JSON Files', extensions: ['json'] }]
+    });
+    if (!filePath) { return false; }
+
+    // make sure the active quadrat is captured before serializing
+    store.commit('UPDATE_RUNNING_DATA');
+    await saveSessionToFile(filePath, getSessionState(store));
+    return true;
+}
+
+/**
+ * Full interactive load flow: confirm overwrite, pick a file, restore it.
+ * The caller is responsible for reloading the active image afterwards.
+ * @param {object} store - The Vuex store instance.
+ * @returns {Promise<boolean>} true if a session was restored.
+ */
+async function loadSessionInteractive(store) {
+    if (store.state.runningData.length > 0) {
+        // only warn if there is actually data to lose
+        const confirmation = await ipcRenderer.invoke('question', {
+            title: 'Confirm Load Session',
+            question: 'Loading a session will overwrite your current progress. Are you sure you want to continue?',
+            buttons: ['No', 'Yes']
+        });
+        if (!confirmation.response) { return false; }
+    }
+
+    const filePaths = await ipcRenderer.invoke('openFile', {
+        filters: [{ name: 'JSON Files', extensions: ['json'] }],
+        properties: ['openFile']
+    });
+    if (!filePaths || filePaths.length === 0) { return false; }
+
+    const sessionState = await loadSessionFromFile(filePaths[0]);
+    store.commit('RESTORE_SESSION', sessionState);
+    return true;
+}
+
+export {
+    getSessionState,
+    saveSessionToFile,
+    loadSessionFromFile,
+    saveSessionInteractive,
+    loadSessionInteractive
+}; 

@@ -33,7 +33,8 @@ import ImageViewer from './components/ImageViewer';
 import RightPanel from './components/RightPanel';
 import { mapState, mapMutations, mapActions } from 'vuex';
 import _ from 'lodash';
-import { getSessionState } from './utils/sessionUtils';
+import { getSessionState, saveSessionInteractive, loadSessionInteractive } from './utils/sessionUtils';
+const { ipcRenderer } = require('electron');
 
 console.log(window)
 
@@ -108,18 +109,28 @@ export default {
         ...mapMutations([
             'UPDATE_RUNNING_DATA'
         ]),
-        handleKeyDown(event) {
+        async handleKeyDown(event) {
             if (event.ctrlKey && event.key === 's') {
                 event.preventDefault(); // Prevent the browser's default save dialog
-                // Call the save method on the child component
-                if (this.$refs.rightPanel) {
-                    this.$refs.rightPanel.triggerSaveSession();
+                try {
+                    await saveSessionInteractive(this.$store);
+                } catch (error) {
+                    console.error('Failed to save session:', error);
+                    ipcRenderer.invoke('alert', `Error saving session: ${error.message}`);
                 }
             }
         },
-        handleTriggerLoadSession() {
-            if (this.$refs.rightPanel) {
-                this.$refs.rightPanel.triggerLoadSessionFromFile();
+        async handleTriggerLoadSession() {
+            try {
+                const loaded = await loadSessionInteractive(this.$store);
+                if (loaded) {
+                    this.$nextTick(() => {
+                        this.$refs.imageViewer.loadExistingImage(this.$store.state.imgSrc);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load session:', error);
+                ipcRenderer.invoke('alert', `Error loading session: ${error.message}`);
             }
         },
         updatePanelSize() {

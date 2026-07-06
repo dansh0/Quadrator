@@ -20,6 +20,8 @@
 
 <script>
 import { mapState } from 'vuex';
+import { ipcRenderer } from 'electron';
+import { exportDataInteractive } from '../../utils/exportUtils';
 
 export default {
     name: 'QATab',
@@ -47,9 +49,16 @@ export default {
         }
     },
     methods: {
-        exportCsv() {
-            // Call existing export util when wired up
-            console.log('Export CSV – logic TBD');
+        async exportCsv() {
+            try {
+                const exported = await exportDataInteractive(this.$store);
+                if (exported) {
+                    ipcRenderer.invoke('alert', 'Data exported successfully.');
+                }
+            } catch (error) {
+                console.error('Export failed:', error);
+                ipcRenderer.invoke('alert', `Export failed: ${error.message}. Make sure the file is not open in another program.`);
+            }
         },
         rowClicked(item) {
             // item.point is 1-based; convert to 0-based index for sampleNumber
