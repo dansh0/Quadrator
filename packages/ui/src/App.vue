@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { version as appVersion } from '../../../package.json';
 import logoUrl from './assets/QUADRATOR_LOGO_white_text_transparent.png';
 import homeBgUrl from './assets/pexels-pok-rie-33563-1031200.jpg';
+import { createAutosaver } from './autosave.ts';
 import ImageCanvas from './components/ImageCanvas.vue';
 import RightPanel from './components/RightPanel.vue';
 import { usePlatform } from './platform.ts';
@@ -14,6 +16,9 @@ const store = useSessionStore();
 const species = useSpeciesStore();
 const tagging = useTaggingStore();
 
+const hasAutosave = ref(false);
+const homeError = ref<string | null>(null);
+
 async function onLoadImages(): Promise<void> {
   await store.addImages(platform);
 }
@@ -21,6 +26,26 @@ async function onLoadImages(): Promise<void> {
 async function onOpen(): Promise<void> {
   await store.open(platform);
 }
+
+async function onContinueLast(): Promise<void> {
+  homeError.value = null;
+  try {
+    await store.restoreAutosaved(platform);
+  } catch {
+    // legacy behavior: a corrupt snapshot is dropped, not retried forever
+    homeError.value =
+      'Session could not be loaded. It may be corrupt. Please load new images to continue.';
+    await store.clearAutosaved(platform);
+    hasAutosave.value = false;
+  }
+}
+
+// Crash recovery: throttled snapshot of the session into the settings
+// document whenever the store changes (legacy auto-save to localStorage).
+const autosaver = createAutosaver(() => void store.autosave(platform));
+store.$subscribe(() => {
+  if (store.quadratCount > 0) autosaver.notify();
+});
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.ctrlKey && event.key === 's') {
@@ -38,8 +63,12 @@ watch(
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
   void species.init(platform);
+  void store.hasAutosaved(platform).then((v) => (hasAutosave.value = v));
 });
-onUnmounted(() => window.removeEventListener('keydown', onKeydown));
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown);
+  autosaver.stop();
+});
 </script>
 
 <template>
@@ -73,6 +102,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
                       Load Image
                     </v-btn>
                     <v-btn
+                      v-if="hasAutosave"
+                      color="primary"
+                      size="large"
+                      prepend-icon="mdi-history"
+                      class="elevation-6 mb-4 home-button"
+                      data-test="home-continue-last"
+                      @click="onContinueLast"
+                    >
+                      Continue Last Session
+                    </v-btn>
+                    <v-btn
                       color="primary"
                       size="large"
                       prepend-icon="mdi-folder-open"
@@ -82,6 +122,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
                     >
                       Load from File
                     </v-btn>
+                    <v-alert
+                      v-if="homeError"
+                      type="error"
+                      density="compact"
+                      class="mt-4"
+                      data-test="home-error"
+                    >
+                      {{ homeError }}
+                    </v-alert>
+                    <p class="text-caption text-grey mb-1 mt-5">Beta Release v{{ appVersion }}</p>
+                    <p class="text-caption text-grey mb-0">
+                      © 2025 Shores Design. All rights reserved.
+                    </p>
                   </v-card-text>
                 </v-card>
               </div>
@@ -98,6 +151,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
     </v-main>
   </v-app>
 </template>
+
+<style>
+/* Single-window desktop app: the page itself never scrolls (legacy shell
+   rule); only designated panes (e.g. the tab content) scroll internally. */
+html,
+body {
+  overflow: hidden;
+}
+</style>
 
 <style scoped>
 /* Legacy right panel is a fixed 400px (store.js windowHelpers.rightPanelWidth). */

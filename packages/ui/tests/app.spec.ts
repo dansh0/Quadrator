@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-import { InMemoryPlatformAdapter } from '@quadrator/core';
+import { InMemoryPlatformAdapter, serializeSession } from '@quadrator/core';
 import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { describe, expect, it } from 'vitest';
 import App from '../src/App.vue';
 import { platformKey } from '../src/platform.ts';
 import { createAppVuetify } from '../src/plugins/vuetify.ts';
-import { useSessionStore } from '../src/stores/session.ts';
+import { emptySession, useSessionStore } from '../src/stores/session.ts';
 
 function mountApp(platform = new InMemoryPlatformAdapter()) {
   return mount(App, {
@@ -71,5 +71,53 @@ describe('App shell (Vue 3 + Vuetify 3 + Pinia + core wiring)', () => {
     expect(wrapper.find('[data-test="image-canvas"]').exists()).toBe(true);
     // the session references an image this adapter can't resolve → re-link offer
     expect(wrapper.find('[data-test="image-load-error"]').text()).toContain('/photos/reef-1.jpg');
+  });
+
+  it('offers Continue Last Session only when an autosave snapshot exists', async () => {
+    const wrapper = mountApp();
+    await flush();
+    expect(wrapper.find('[data-test="home-continue-last"]').exists()).toBe(false);
+
+    const session = emptySession(new Date('2026-07-07T12:00:00.000Z'));
+    session.quadrats.push({
+      id: 'q1',
+      imagePath: '/img/reef.jpg',
+      name: 'reef',
+      boundary: [],
+      geoDefined: false,
+      rngSeed: null,
+      samples: [],
+    });
+    session.currentQuadratId = 'q1';
+    const platform = new InMemoryPlatformAdapter();
+    await platform.saveSettings({ lastSessionText: serializeSession(session) });
+
+    const wrapper2 = mountApp(platform);
+    await flush();
+    await wrapper2.find('[data-test="home-continue-last"]').trigger('click');
+    await flush();
+
+    expect(wrapper2.find('[data-test="home-screen"]').exists()).toBe(false);
+    expect(wrapper2.find('[data-test="image-canvas"]').exists()).toBe(true);
+  });
+
+  it('a corrupt autosave snapshot shows the legacy error and is dropped', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    await platform.saveSettings({ lastSessionText: '{"schemaVersion": 99}' });
+
+    const wrapper = mountApp(platform);
+    await flush();
+    await wrapper.find('[data-test="home-continue-last"]').trigger('click');
+    await flush();
+
+    expect(wrapper.find('[data-test="home-error"]').text()).toContain('may be corrupt');
+    expect(wrapper.find('[data-test="home-continue-last"]').exists()).toBe(false);
+    const settings = (await platform.loadSettings()) as Record<string, unknown>;
+    expect(settings['lastSessionText']).toBeNull();
+  });
+
+  it('shows the release version on the home screen', () => {
+    const wrapper = mountApp();
+    expect(wrapper.find('[data-test="home-screen"]').text()).toMatch(/Beta Release v\d+\.\d+/);
   });
 });

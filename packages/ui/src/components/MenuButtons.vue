@@ -4,6 +4,7 @@ import { exportSessionCsv } from '../export.ts';
 import { usePlatform } from '../platform.ts';
 import { useSessionStore } from '../stores/session.ts';
 import { useSpeciesStore } from '../stores/species.ts';
+import { useTaggingStore } from '../stores/tagging.ts';
 
 const emit = defineEmits<{
   /** The canvas re-initializes boundary drawing for the current quadrat. */
@@ -13,6 +14,7 @@ const emit = defineEmits<{
 const platform = usePlatform();
 const session = useSessionStore();
 const species = useSpeciesStore();
+const tagging = useTaggingStore();
 
 const error = ref<string | null>(null);
 const notice = ref<string | null>(null);
@@ -29,7 +31,20 @@ async function guard(work: () => Promise<void>): Promise<void> {
 
 const onLoadImages = () => guard(async () => void (await session.addImages(platform)));
 const onSaveSession = () => guard(async () => void (await session.save(platform)));
-const onLoadSession = () => guard(async () => void (await session.open(platform)));
+const openSessionNow = () => guard(async () => void (await session.open(platform)));
+
+function onLoadSession(): void {
+  // legacy rule: only warn when there is actually progress to lose
+  if (session.quadratCount === 0) {
+    void openSessionNow();
+    return;
+  }
+  confirm.value = {
+    question:
+      'Loading a session will overwrite your current progress. Are you sure you want to continue?',
+    action: () => void openSessionNow(),
+  };
+}
 const onExport = () =>
   guard(async () => {
     if (session.session === null) return;
@@ -53,7 +68,13 @@ function onResetNodes(): void {
 function onStartOver(): void {
   confirm.value = {
     question: 'Are you sure you want to delete all unsaved progress and start over?',
-    action: () => session.$reset(),
+    action: () => {
+      // legacy reloads the whole app: session, cursor/tab AND the
+      // crash-recovery snapshot all go; species buttons persist (settings)
+      void session.clearAutosaved(platform);
+      session.$reset();
+      tagging.$reset();
+    },
   };
 }
 

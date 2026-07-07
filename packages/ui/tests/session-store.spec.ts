@@ -215,6 +215,54 @@ describe('session store', () => {
     expect(store.dirty).toBe(true);
   });
 
+  it('autosave snapshots the session into settings without touching other keys', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    await platform.saveSettings({ hotkeysEnabled: false, speciesCsvText: 'code\nUlva' });
+
+    const store = useSessionStore();
+    store.newSession(NOW);
+    await store.autosave(platform); // empty session: must NOT write a snapshot
+    expect(await store.hasAutosaved(platform)).toBe(false);
+
+    store.session!.quadrats.push(blankQuadrat('q1'));
+    await store.autosave(platform);
+    expect(await store.hasAutosaved(platform)).toBe(true);
+    const settings = (await platform.loadSettings()) as Record<string, unknown>;
+    expect(settings['hotkeysEnabled']).toBe(false); // other keys survive
+    expect(settings['speciesCsvText']).toBe('code\nUlva');
+  });
+
+  it('restoreAutosaved round-trips the snapshot as an unsaved dirty session', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    const store = useSessionStore();
+    store.newSession(NOW);
+    store.session!.quadrats.push(blankQuadrat('q1'));
+    store.session!.currentQuadratId = 'q1';
+    await store.autosave(platform);
+
+    // simulate a fresh launch
+    setActivePinia(createPinia());
+    const fresh = useSessionStore();
+    expect(await fresh.restoreAutosaved(platform)).toBe(true);
+    expect(fresh.currentQuadrat?.id).toBe('q1');
+    expect(fresh.fileRef).toBeNull();
+    expect(fresh.dirty).toBe(true);
+  });
+
+  it('restoreAutosaved: none = false; corrupt snapshot throws, state untouched', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    const store = useSessionStore();
+    expect(await store.restoreAutosaved(platform)).toBe(false);
+
+    await platform.saveSettings({ lastSessionText: '{"schemaVersion": 99}' });
+    store.newSession(NOW);
+    await expect(store.restoreAutosaved(platform)).rejects.toThrow();
+    expect(store.hasSession).toBe(true); // previous session survives
+
+    await store.clearAutosaved(platform);
+    expect(await store.hasAutosaved(platform)).toBe(false);
+  });
+
   it('saved bytes round-trip through parseSession', async () => {
     const platform = new InMemoryPlatformAdapter();
     platform.queueSessionOpen(sessionJson());

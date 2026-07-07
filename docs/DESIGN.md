@@ -42,6 +42,15 @@ restarts (`capabilities.persistentFileIds: false`) recover images
 through the `relinkImage` flow. `InMemoryPlatformAdapter` (in core) is
 the scriptable test double for UI tests and browser demo mode.
 
+Crash recovery: the UI keeps a throttled snapshot of the session
+(`lastSessionText` in the adapter-persisted settings document — the
+legacy app used localStorage) and offers it as "Continue Last Session"
+on the home screen. The snapshot writes on the leading **and** trailing
+edge of a 5s window (`packages/ui/src/autosave.ts`); legacy dropped
+trailing changes, which could lose up to 5s of tagging on a crash. A
+corrupt snapshot is surfaced and dropped, never retried; Start Over
+clears it.
+
 ### `@quadrator/core` module map
 
 | Module | Responsibility |
@@ -112,7 +121,7 @@ sessions) with pluggable backends, so no vendor is load-bearing.
 |---|---|---|
 | 0 | Data-safety hotfixes on the legacy app; capture real fixture files; initial unit suite | **Done** |
 | 1 | Extract `@quadrator/core` (geometry, sampling, CSV, species, versioned sessions) with full test suite; npm workspaces; CI typecheck gate | **Done** |
-| 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | **In progress** — adapter contract, ui scaffold, Electron shell, all screens, and the image canvas done; remaining: feature-parity audit vs legacy, then cutover (retire `src/`, pnpm, ESLint flat config) |
+| 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | **In progress** — adapter contract, ui scaffold, Electron shell, all screens, image canvas, and the feature-parity audit done (gaps closed: crash-recovery autosave + Continue Last Session, load-session overwrite confirm, home-screen version footer); remaining: cutover (retire `src/`, pnpm, ESLint flat config) |
 | 3 | `apps/web`: browser adapter, static hosting, Playwright E2E suite | Planned |
 | 4 | Cloud sync (provider-agnostic), shared species libraries, multi-device sessions | Planned |
 

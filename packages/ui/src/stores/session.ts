@@ -19,6 +19,7 @@ import {
   serializeSession,
 } from '@quadrator/core';
 import { defineStore } from 'pinia';
+import { parseUiSettings } from '../settings.ts';
 
 /** Display name for a new quadrat: file name without its extension. */
 function imageBaseName(name: string): string {
@@ -204,6 +205,48 @@ export const useSessionStore = defineStore('session', {
         this.currentQuadrat.name = name;
         this.dirty = true;
       }
+    },
+
+    /**
+     * Write the crash-recovery snapshot into the settings document (legacy
+     * auto-save to localStorage). No-op until the session has content, so
+     * an empty startup can never clobber a recoverable snapshot.
+     */
+    async autosave(platform: PlatformAdapter): Promise<void> {
+      if (this.session === null || this.session.quadrats.length === 0) return;
+      const text = serializeSession(this.session);
+      const current = parseUiSettings(await platform.loadSettings());
+      await platform.saveSettings({ ...current, lastSessionText: text });
+    },
+
+    /** True when a crash-recovery snapshot is available to restore. */
+    async hasAutosaved(platform: PlatformAdapter): Promise<boolean> {
+      return parseUiSettings(await platform.loadSettings()).lastSessionText !== null;
+    },
+
+    /**
+     * Restore the autosaved snapshot (home-screen "Continue Last Session").
+     * Returns false when there is none. Parse failures propagate — the
+     * caller decides whether to clear the corrupt snapshot — and never
+     * replace the current session with a half-loaded one. The restored
+     * session has no file binding and is dirty: it exists only in the
+     * snapshot until the user saves it properly.
+     */
+    async restoreAutosaved(platform: PlatformAdapter): Promise<boolean> {
+      const text = parseUiSettings(await platform.loadSettings()).lastSessionText;
+      if (text === null) return false;
+      const session = parseSession(text); // throws before any state change
+      this.session = session;
+      this.fileRef = null;
+      this.dirty = true;
+      return true;
+    },
+
+    /** Drop the crash-recovery snapshot (Start Over, or a corrupt restore). */
+    async clearAutosaved(platform: PlatformAdapter): Promise<void> {
+      const current = parseUiSettings(await platform.loadSettings());
+      if (current.lastSessionText === null) return;
+      await platform.saveSettings({ ...current, lastSessionText: null });
     },
 
     /** Save under a new name chosen by the user. False = cancelled. */

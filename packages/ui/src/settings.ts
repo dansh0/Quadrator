@@ -10,12 +10,22 @@ export const uiSettingsSchema = z
     hotkeysEnabled: z.boolean().default(true),
     /** Last-loaded species CSV, stored by content so it survives moved files and works on web. */
     speciesCsvText: z.string().nullable().default(null),
+    /**
+     * Crash-recovery snapshot: the serialized session as of the last
+     * autosave, offered as "Continue Last Session" on the home screen
+     * (legacy stored this in localStorage).
+     */
+    lastSessionText: z.string().nullable().default(null),
   })
   .passthrough(); // forward-compatible: keep keys written by newer versions
 
 export type UiSettings = z.infer<typeof uiSettingsSchema>;
 
-export const DEFAULT_SETTINGS: UiSettings = { hotkeysEnabled: true, speciesCsvText: null };
+export const DEFAULT_SETTINGS: UiSettings = {
+  hotkeysEnabled: true,
+  speciesCsvText: null,
+  lastSessionText: null,
+};
 
 export function parseUiSettings(value: unknown): UiSettings {
   if (value === null || value === undefined) return { ...DEFAULT_SETTINGS };
