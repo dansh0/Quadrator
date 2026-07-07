@@ -25,14 +25,63 @@ Companion docs (read before non-trivial work):
 ## Verification gate (all must pass)
 
 ```
-npm test                        # Vitest: legacy + core suites
-npm run typecheck               # tsc strict over @quadrator/core
+npm test                        # Vitest: legacy + core + ui suites
+npm run typecheck               # tsc/vue-tsc strict over all workspaces
 npm run lint                    # ESLint over src/ (legacy only)
-npm run electron:build -- --dir # proves the desktop app still packages
+npm run electron:build -- --dir # proves the legacy desktop app still packages
 ```
 
-Other commands: `npm run electron:serve` (run the desktop app),
-`npm run test:watch`.
+Other commands:
+
+- `npm test -- --project ui` (or `legacy+core`) — run one Vitest
+  project; `npm run test:watch` for watch mode. Projects are defined in
+  the root `vitest.config.js`; the ui workspace has its own
+  `packages/ui/vitest.config.ts` (needs `@vitejs/plugin-vue` — root vue
+  is v2).
+- `npm run dev:ui` — new UI in a browser on the in-memory adapter
+  (Vite dev server, no Electron needed).
+- `npm run dev:desktop` — build the new UI and launch it in the new
+  Electron shell. `npm -w @quadrator/desktop run dev` instead loads
+  from a running Vite dev server (`QUADRATOR_DEV_URL`).
+- `npm run electron:serve` — run the legacy desktop app.
+
+## UI test conventions (`packages/ui/tests/`)
+
+- Default environment is `node`; component tests opt in with
+  `// @vitest-environment happy-dom` at the top of the file.
+- Every test builds a fresh store world: `setActivePinia(createPinia())`
+  in `beforeEach`, then mount with `createAppVuetify()` and provide an
+  `InMemoryPlatformAdapter` under `platformKey`. Never touch the real
+  filesystem — script the adapter (`queueSessionOpen`, `queueSaveTarget`,
+  `addImage`, `queueRelink`, …) and assert on `savedSessions` etc.
+- Components are queried via `data-test` attributes, not classes or
+  Vuetify internals. New interactive elements get a `data-test`.
+- happy-dom cannot load images or measure layout. Canvas tests inject a
+  stub sizer via `imageSizerKey` (from `src/canvas.ts`) and rely on the
+  component's 800×600 fallback container: with a 4:3 stub image the
+  fitted SVG is exactly 800×600, so a click at normalized `(nx, ny)` is
+  `clientX = nx*800, clientY = ny*600` (`getBoundingClientRect()` is all
+  zeros in happy-dom). See the header comment in
+  `tests/image-canvas.spec.ts` before changing this.
+- Canvas math (fit/transform/tolerance/palette) is pure and DOM-free in
+  `src/canvas.ts`, tested directly in `tests/canvas-math.spec.ts` —
+  extend it there rather than inside the component.
+- Sampling determinism: pass an explicit seed
+  (`store.defineBoundary(ring, 42)`) and assert exact regeneration;
+  never assert on unseeded output.
+
+## Desktop diagnostics (env vars on `apps/desktop`)
+
+- `QUADRATOR_DEV_URL=<url>` — load the renderer from a Vite dev server
+  instead of `packages/ui/dist`.
+- `QUADRATOR_SMOKE=1` — exit right after the window loads (CI smoke).
+- `QUADRATOR_SHOT=<path.png>` — capture the rendered window to a PNG,
+  then exit. `QUADRATOR_SHOT_SCRIPT=<js>` runs a script in the page
+  first (seed stores, dispatch synthetic events) — this is how canvas
+  changes are verified visually against the real shell.
+- In dev builds the page exposes `window.__quadratorPinia` for
+  inspecting/seeding stores from shot scripts or the console (the
+  legacy app exposed `window.fstore` the same way).
 
 ## Repository layout
 
@@ -41,7 +90,9 @@ Other commands: `npm run electron:serve` (run the desktop app),
 | `src/` | **Legacy app** — Vue 2.6 + Vuetify 2 + Vuex 3 + Electron 13, built by Vue CLI 5/webpack. Being replaced; keep changes minimal and behavior-preserving. |
 | `src/assets/poly-split-js-master/` | Vendored polygon-split library. Known-buggy; superseded by `packages/core` but still imported by the legacy app — do not delete or "fix". |
 | `packages/core/` | **`@quadrator/core`** — platform-free domain logic in strict TypeScript (geometry, sampling, CSV export, species parsing, versioned session schema). No build step; consumed as source. All new domain logic goes here. |
-| `packages/core/tests/` | Core test suite (Vitest, TS). |
+| `packages/core/tests/` | Core test suite (Vitest, TS), including fast-check property tests. |
+| `packages/ui/` | **`@quadrator/ui`** — Vue 3 + Vuetify 3 + Pinia UI layer (Vite). Platform I/O only through the `PlatformAdapter` interface from core; tests use `InMemoryPlatformAdapter`. Replaces `src/` at Phase 2 cutover. |
+| `apps/desktop/` | **`@quadrator/desktop`** — Electron shell (current major, context isolation + sandbox). Main process owns fs/dialogs; preload exposes the adapter bridge on `window.quadrator`. `npm run dev:desktop` builds the UI and launches it. |
 | `tests/unit/` | Legacy test suite (Vitest, JS). |
 | `tests/fixtures/` | Real session files and species CSVs. These anchor migration tests forever; add sanitized real-world files here, never delete. |
 | `docs/` | Project documentation. |

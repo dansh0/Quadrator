@@ -1,0 +1,21 @@
+{
+  "name": "@quadrator/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Quadrator desktop shell: Electron with context isolation; implements PlatformAdapter over typed IPC.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && QUADRATOR_DEV_URL=http://localhost:5173 electron ."
+  },
+  "dependencies": {
+    "@quadrator/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "electron": "^43.0.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.9.3"
+  }
+}

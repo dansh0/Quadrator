@@ -19,19 +19,28 @@ never lose or silently corrupt user data; make sampling reproducible
 
 ```
 packages/core      @quadrator/core — platform-free domain logic (TS, done)
+packages/ui        @quadrator/ui — Vue 3 + Vuetify 3 + Pinia layer (Vite; in progress)
+apps/desktop       @quadrator/desktop — Electron shell, context-isolated preload (scaffolded)
 src/               legacy Vue 2 + Electron shell (to be replaced)
-packages/ui        planned: Vue 3 component layer + Pinia stores
-apps/desktop       planned: Electron shell (context-isolated preload)
 apps/web           planned: static web build of the same UI
 ```
 
 All domain logic lives in core and is UI- and platform-agnostic. Shells
-provide I/O through a **PlatformAdapter** interface (planned, Phase 2):
-open/save session files, load images, export CSV, persist settings —
-implemented once for Electron (IPC to the main process) and once for
-the browser (File System Access API / download fallback). The UI layer
-depends only on core + the adapter interface, which is what makes a
-single codebase serve desktop and web.
+provide I/O through the **PlatformAdapter** interface (defined in
+`packages/core/src/platform/`, types only): open/save session files,
+load images, export CSV, persist settings — implemented once for
+Electron (IPC to the main process) and once for the browser (File
+System Access API / download fallback). The UI layer depends only on
+core + the adapter interface, which is what makes a single codebase
+serve desktop and web.
+
+Adapter conventions: every method is async; user cancellation is a
+value (`null`/empty array), never an exception; failures throw
+`PlatformIOError`. `FileRef.id` is the stable identity persisted in
+session files (`imagePath`). Adapters whose ids do not survive
+restarts (`capabilities.persistentFileIds: false`) recover images
+through the `relinkImage` flow. `InMemoryPlatformAdapter` (in core) is
+the scriptable test double for UI tests and browser demo mode.
 
 ### `@quadrator/core` module map
 
@@ -76,6 +85,23 @@ Vue 2, Vuetify 2, Electron 13). Electron is upgraded to a current LTS
 with **context isolation on** and a minimal typed preload API. d3 usage
 shrinks to scales/zoom behavior; geometry math comes from core.
 
+### Image canvas (ported)
+
+The legacy imperative d3 canvas is replaced by declarative SVG in
+`packages/ui/src/components/ImageCanvas.vue`: the template renders
+image, boundary, sample points and crosshair straight from the stores;
+d3 is reduced to `d3-zoom`/`d3-selection` for pan/zoom on the inner
+`<g>`. Pure fit/transform/tolerance math lives DOM-free in
+`packages/ui/src/canvas.ts`. Legacy behaviors preserved: boundary
+nodes and samples stored image-normalized (0–1); zoom gated on a
+defined boundary; overlay sizes scaled by `1/(0.5 + 0.5k)`; polygon
+close within 0.025 per-axis of the first node (now requiring ≥3 nodes);
+quad mode auto-completes at 4 nodes; sample click moves the cursor and
+jumps to Species ID. Equal-area cut lines are **not persisted** in v1 —
+they are recomputed from the boundary + stored `rngSeed`, and rendered
+only if the recomputed points exactly match the stored samples, so
+settings drift can never display a misleading partition.
+
 Cloud features (later phases) are **provider-agnostic**: a small sync
 interface (auth, blob storage for images, document storage for
 sessions) with pluggable backends, so no vendor is load-bearing.
@@ -86,7 +112,7 @@ sessions) with pluggable backends, so no vendor is load-bearing.
 |---|---|---|
 | 0 | Data-safety hotfixes on the legacy app; capture real fixture files; initial unit suite | **Done** |
 | 1 | Extract `@quadrator/core` (geometry, sampling, CSV, species, versioned sessions) with full test suite; npm workspaces; CI typecheck gate | **Done** |
-| 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | Next |
+| 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | **In progress** — adapter contract, ui scaffold, Electron shell, all screens, and the image canvas done; remaining: feature-parity audit vs legacy, then cutover (retire `src/`, pnpm, ESLint flat config) |
 | 3 | `apps/web`: browser adapter, static hosting, Playwright E2E suite | Planned |
 | 4 | Cloud sync (provider-agnostic), shared species libraries, multi-device sessions | Planned |
 
@@ -98,10 +124,12 @@ summaries beyond per-quadrat coverage.
 ## 5. Testing strategy
 
 Current state: unit suites for core (≥95% statement coverage enforced
-as a floor) and the legacy modules that carry data-safety fixes.
-Component and E2E tests are deliberately deferred to Phase 2 — they are
-written against the new UI as it is built, not retrofitted onto code
-scheduled for deletion.
+as a floor) and the legacy modules that carry data-safety fixes;
+component suites for every Vue 3 component (stores, tabs, panels, and
+the image canvas — happy-dom, `InMemoryPlatformAdapter`, injected image
+sizer; conventions in AGENTS.md). E2E tests remain deferred to the
+Phase 3 web build. Visual verification of the desktop shell uses the
+`QUADRATOR_SHOT` screenshot hook rather than a snapshot suite.
 
 Planned, in rough order of value:
 
@@ -114,7 +142,9 @@ Planned, in rough order of value:
    parse∘serialize = identity).
 3. **Component tests** (Vitest + @vue/test-utils + happy-dom) alongside
    each new Vue 3 component: species-button/store sync, hotkey gating
-   while inputs are focused, QA-table behavior, tab gating.
+   while inputs are focused, QA-table behavior, tab gating, canvas
+   drawing/tagging flows. **Done** — maintained as a standing practice,
+   not a phase.
 4. **E2E** (Playwright against the web build, seeded RNG test hook):
    golden path draw→tag→export with exact CSV assertion; polygon mode;
    session round-trip; multi-image navigation with duplicate filenames;

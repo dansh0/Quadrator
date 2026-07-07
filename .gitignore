@@ -32,3 +32,8 @@ Installers
 # Local working notes (not part of the repo docs)
 /July2026Audit.md
 /July2026Plan.md
+# Vite build output (packages/ui)
+/packages/ui/dist
+
+# Desktop shell build output (apps/desktop)
+/apps/desktop/dist

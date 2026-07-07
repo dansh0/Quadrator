@@ -45,6 +45,16 @@ export type { Sample, SpeciesEntry, QuadratSettings } from './model/types.ts';
 export { CSV_HEADER, type QuadratCsvInput, csvEscape, quadratCsvRows } from './export/csv.ts';
 export { CsvParseError, parseSpeciesCsv } from './species/parse.ts';
 
+// platform
+export {
+  type FileRef,
+  type OpenedTextFile,
+  type PlatformAdapter,
+  type PlatformCapabilities,
+  PlatformIOError,
+} from './platform/adapter.ts';
+export { InMemoryPlatformAdapter } from './platform/memory.ts';
+
 // serialization
 export { type SessionV0, sessionV0Schema } from './serialization/v0.ts';
 export {
