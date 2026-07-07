@@ -61,6 +61,28 @@ describe('parseSpeciesCsv', () => {
     });
   });
 
+  it('handles bare-CR line endings (classic Mac exports)', () => {
+    const entries = parseSpeciesCsv('code,species\rA,Alpha\rB,Beta\r');
+    expect(entries.map((e) => e.code)).toEqual(['A', 'B']);
+  });
+
+  it('ignores blank lines between records', () => {
+    const entries = parseSpeciesCsv('code,species\n\nA,Alpha\n\n\nB,Beta\n');
+    expect(entries.map((e) => e.code)).toEqual(['A', 'B']);
+  });
+
+  it('parses a final record with no trailing newline', () => {
+    expect(parseSpeciesCsv('code,species\nA,Alpha')).toHaveLength(1);
+    // ... including when the last field is empty (trailing comma at EOF)
+    const entries = parseSpeciesCsv('code,species,group1\nA,Alpha,');
+    expect(entries[0]).toMatchObject({ code: 'A', species: 'Alpha', group1: '' });
+  });
+
+  it('rows shorter than the header read missing cells as empty strings', () => {
+    const entries = parseSpeciesCsv('code,species,group1,group2\nA,Alpha\n');
+    expect(entries[0]).toMatchObject({ code: 'A', species: 'Alpha', group1: '', group2: '' });
+  });
+
   it('rejects input without the required header columns', () => {
     expect(() => parseSpeciesCsv('')).toThrow(CsvParseError);
     expect(() => parseSpeciesCsv('foo,bar\n1,2\n')).toThrow(CsvParseError);

@@ -120,6 +120,41 @@ describe('splitByArea', () => {
     });
   });
 
+  it('stays accurate when the best cut lands beside a tiny edge (quadratic cancellation regression)', () => {
+    // fast-check counterexample: concave ring with two near-duplicate
+    // vertices (~0.09 apart). The direct root form (a − √d)/(2·tgA) in
+    // findCutLine lost ~1.6% of the piece area to cancellation here.
+    const ring: Ring = [
+      { x: 5, y: 0 },
+      { x: 34.95604110685928, y: 37.48576470933246 },
+      { x: 0.6958655048003284, y: 4.951340343707852 },
+      { x: 0.6093467170257374, y: 4.96273075820661 },
+      { x: -40.245669186776944, y: -18.766863749366735 },
+    ];
+    checkSplit(ring, area(ring) / 2);
+  });
+
+  it('rejects model-misplaced cuts by measuring candidate areas (regression)', () => {
+    // fast-check counterexample: sequential 5-way split of this ring chose a
+    // shortest cut whose decomposition model was off by 1.7% before candidate
+    // areas were validated by measurement.
+    const ring: Ring = [
+      { x: 5, y: 0 },
+      { x: 4.999238475781956, y: 0.08726203218641757 },
+      { x: 49.82057592187315, y: 1.7397728477138492 },
+      { x: 4.095760221444959, y: 2.8678821817552302 },
+      { x: -52.74989048360577, y: -24.59767789934284 },
+    ];
+    const total = area(ring);
+    let remaining: Ring = ring;
+    for (let k = 0; k < 4; k++) {
+      const { piece, rest } = splitByArea(remaining, total / 5);
+      expectClose(area(piece), total / 5, 1e-6);
+      remaining = rest;
+    }
+    expectClose(area(remaining), total / 5, 1e-6);
+  });
+
   it('closed rings (duplicate last vertex) are tolerated', () => {
     const closed = [...unitSquare, { x: 0, y: 0 }];
     checkSplit(closed, 0.5);

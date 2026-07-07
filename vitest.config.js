@@ -14,7 +14,20 @@ export default defineConfig({
         include: ['tests/unit/**/*.spec.js', 'packages/core/tests/**/*.spec.ts'],
         environment: 'node',
         coverage: {
-            include: ['src/dataModel/**', 'src/utils/**', 'src/store.js', 'src/InputState.js']
+            include: [
+                'src/dataModel/**',
+                'src/utils/**',
+                'src/store.js',
+                'src/InputState.js',
+                'packages/core/src/**'
+            ],
+            thresholds: {
+                // Core is held to the STYLE_GUIDE §3 floor; the legacy globs
+                // above are reported but not gated (scheduled for replacement).
+                'packages/core/src/**': {
+                    statements: 95
+                }
+            }
         }
     }
 });

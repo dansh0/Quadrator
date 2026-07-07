@@ -74,4 +74,17 @@ describe('samplePolygon', () => {
     expect(() => samplePolygon(zeroArea, 3, mulberry32(1))).toThrow(GeometryError);
     expect(() => samplePolygon(zeroArea, 1, mulberry32(1))).toThrow(GeometryError);
   });
+
+  it('rejection-sampling cap: a stuck Rng throws GeometryError instead of looping forever', () => {
+    // Constant rng pins every candidate at bbox corner (0.99, 0.99), outside
+    // this triangle (x + y > 1), so all MAX_REJECTION_TRIES attempts miss.
+    const triangle = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+    ];
+    const stuckRng = () => 0.99;
+    expect(() => samplePolygon(triangle, 1, stuckRng)).toThrow(GeometryError);
+    expect(() => samplePolygon(triangle, 1, stuckRng)).toThrow(/tries/);
+  });
 });

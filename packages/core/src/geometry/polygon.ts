@@ -283,7 +283,9 @@ function findCutLine(target: number, res: CutRegions): Segment | null {
       const hh = (2 * res.trapezoidArea) / (a + b);
       const d = a * a - 4 * tgA * s;
       if (d < 0) return null; // no real solution (legacy produced NaN here)
-      const h = -(-a + Math.sqrt(d)) / (2 * tgA);
+      // Stable form of (a − √d)/(2·tgA): the direct form cancels
+      // catastrophically when tgA·s ≪ a² (found by property testing).
+      const h = (2 * s) / (a + Math.sqrt(d));
       m = h / hh;
     } else {
       m = s / res.trapezoidArea;
@@ -400,7 +402,7 @@ export function splitByArea(ring: Ring, targetArea: number): SplitResult {
   const work = isClockwise(clean) ? [...clean] : [...clean].reverse();
   const n = work.length;
 
-  let best: { poly1: Ring; poly2: Ring; cut: Segment; sqLen: number } | null = null;
+  let best: { ringA: Ring; ringB: Ring; cut: Segment; sqLen: number } | null = null;
 
   for (let i = 0; i < n - 1; i++) {
     for (let j = i + 1; j < n; j++) {
@@ -416,7 +418,19 @@ export function splitByArea(ring: Ring, targetArea: number): SplitResult {
         (best === null || sqLen < best.sqLen) &&
         isSegmentInsidePoly(work, cut, i, j)
       ) {
-        best = { poly1, poly2, cut, sqLen };
+        // Validate by measurement: getCut's decomposition model can misplace
+        // the cut on near-degenerate edge pairs (tiny edges from almost-
+        // duplicate vertices — found by property testing, ~1.7% area error).
+        // Reject candidates whose measured piece area misses the target; an
+        // accurate candidate exists whenever a valid cut exists at all.
+        const ringA = dedupeRing([...poly1, cut.start, cut.end]);
+        const ringB = dedupeRing([...poly2, cut.end, cut.start]);
+        const err = Math.min(
+          Math.abs(area(ringA) - targetArea),
+          Math.abs(area(ringB) - targetArea)
+        );
+        if (err > total * GEOM_EPS) continue;
+        best = { ringA, ringB, cut, sqLen };
       }
     }
   }
@@ -425,16 +439,13 @@ export function splitByArea(ring: Ring, targetArea: number): SplitResult {
     throw new GeometryError('splitByArea found no valid cut');
   }
 
-  const ringA = dedupeRing([...best.poly1, best.cut.start, best.cut.end]);
-  const ringB = dedupeRing([...best.poly2, best.cut.end, best.cut.start]);
-
   // getCut's sign bookkeeping determines which side carries the target area;
   // assign by measurement rather than re-deriving the legacy sign algebra.
   const closerA =
-    Math.abs(area(ringA) - targetArea) <= Math.abs(area(ringB) - targetArea);
+    Math.abs(area(best.ringA) - targetArea) <= Math.abs(area(best.ringB) - targetArea);
   return {
-    piece: closerA ? ringA : ringB,
-    rest: closerA ? ringB : ringA,
+    piece: closerA ? best.ringA : best.ringB,
+    rest: closerA ? best.ringB : best.ringA,
     cutLine: [best.cut.start, best.cut.end],
   };
 }

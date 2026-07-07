@@ -100,6 +100,17 @@ describe('migrateV0 edge cases', () => {
     expect(migrateV0(sessionV0Schema.parse(win)).quadrats[0]!.name).toBe('reef shot');
   });
 
+  it('name fallback handles extensionless names and dotfiles', () => {
+    const noExt = minimalV0();
+    noExt.runningData[0]!.quadratData.imgSrc = '/photos/IMG_0042';
+    expect(migrateV0(sessionV0Schema.parse(noExt)).quadrats[0]!.name).toBe('IMG_0042');
+
+    // leading dot is not an extension separator
+    const dotfile = minimalV0();
+    dotfile.runningData[0]!.quadratData.imgSrc = '/photos/.hidden';
+    expect(migrateV0(sessionV0Schema.parse(dotfile)).quadrats[0]!.name).toBe('.hidden');
+  });
+
   it('missing sample coordinates become null', () => {
     const v0 = sessionV0Schema.parse(minimalV0());
     const s = migrateV0(v0).quadrats[0]!.samples[0]!;
