@@ -2,12 +2,16 @@
   "name": "quadrator",
   "version": "0.1.16",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
     "lint": "vue-cli-service lint src",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "npm -w @quadrator/core run typecheck",
     "electron:build": "vue-cli-service electron:build",
     "electron:serve": "vue-cli-service electron:serve",
     "postinstall": "electron-builder install-app-deps",

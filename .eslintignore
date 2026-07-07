@@ -1,1 +1,4 @@
 src/assets/poly-split-js-master/
+# ESLint 7 can't parse TypeScript; core is covered by tsc --strict + its own
+# test suite. Proper flat-config linting for packages/ arrives in Phase 2.
+packages/

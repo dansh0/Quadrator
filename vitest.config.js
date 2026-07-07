@@ -11,7 +11,7 @@ export default defineConfig({
         }
     },
     test: {
-        include: ['tests/unit/**/*.spec.js'],
+        include: ['tests/unit/**/*.spec.js', 'packages/core/tests/**/*.spec.ts'],
         environment: 'node',
         coverage: {
             include: ['src/dataModel/**', 'src/utils/**', 'src/store.js', 'src/InputState.js']
