@@ -25,3 +25,10 @@ pnpm-debug.log*
 #Electron-builder output
 /dist_electron
 Installers
+
+# Test coverage output
+/coverage
+
+# Local working notes (not part of the repo docs)
+/July2026Audit.md
+/July2026Plan.md
