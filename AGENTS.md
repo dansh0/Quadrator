@@ -46,6 +46,13 @@ Other commands:
 - `pnpm package:desktop` — build the full distributable
   (`apps/desktop/release/`, AppImage on Linux). `dist:dir` builds the
   unpacked directory only, which is faster and what the gate uses.
+- `pnpm --filter @quadrator/web dev` — the UI in a browser on the
+  `BrowserPlatformAdapter` (real File System Access pickers on Chromium).
+- `pnpm --filter @quadrator/web e2e` — Playwright E2E. Its `webServer`
+  runs `pnpm build && pnpm preview` on port 4173; needs a Chromium
+  browser (`pnpm --filter @quadrator/web exec playwright install
+  chromium` once). The FS Access pickers can't be automated, so the
+  suite forces the download/`<input>` fallback via an init script.
 
 ## UI test conventions (`packages/ui/tests/`)
 
@@ -93,6 +100,7 @@ Other commands:
 | `packages/core/tests/` | Core test suite (Vitest, TS), including fast-check property tests. |
 | `packages/ui/` | **`@quadrator/ui`** — Vue 3 + Vuetify 3 + Pinia UI layer (Vite). Platform I/O only through the `PlatformAdapter` interface from core; tests use `InMemoryPlatformAdapter`. |
 | `apps/desktop/` | **`@quadrator/desktop`** — Electron shell (context isolation + sandbox). Main process owns fs/dialogs behind an image-path allowlist; preload exposes the adapter bridge on `window.quadrator`. electron-builder config lives in its `package.json` (`build` field); icons in `build/`. |
+| `apps/web/` | **`@quadrator/web`** — static browser build of the same UI (Vite, `base: './'`). Mounts `createQuadratorApp(new BrowserPlatformAdapter())`; no server. Playwright E2E in `apps/web/e2e/` (`data-test` selectors, runs the adapter's download/`<input>` fallback mode). |
 | `tests/fixtures/` | Real session files and species CSVs. These anchor migration tests forever; add sanitized real-world files here, never delete. |
 | `docs/` | Project documentation. |
 
@@ -114,7 +122,7 @@ if ever needed.
   `packages/ui/dist` directly.
 - Root `package.json` version is the app version shown in the UI
   footer; keep `apps/desktop/package.json` (what packaged builds
-  report) in sync when bumping.
+  report) and `apps/web/package.json` in sync when bumping.
 
 ## Working conventions
 

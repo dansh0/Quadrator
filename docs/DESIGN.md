@@ -21,7 +21,7 @@ never lose or silently corrupt user data; make sampling reproducible
 packages/core      @quadrator/core — platform-free domain logic (TS, done)
 packages/ui        @quadrator/ui — Vue 3 + Vuetify 3 + Pinia layer (Vite, done)
 apps/desktop       @quadrator/desktop — Electron shell, context-isolated preload (done, packaged with electron-builder)
-apps/web           planned: static web build of the same UI
+apps/web           @quadrator/web — static web build of the same UI (done, BrowserPlatformAdapter + Playwright E2E)
 ```
 
 The legacy Vue 2 + Electron 13 app (`src/` and its Vue CLI toolchain)
@@ -151,7 +151,7 @@ sessions) with pluggable backends, so no vendor is load-bearing.
 | 0 | Data-safety hotfixes on the legacy app; capture real fixture files; initial unit suite | **Done** |
 | 1 | Extract `@quadrator/core` (geometry, sampling, CSV, species, versioned sessions) with full test suite; npm workspaces; CI typecheck gate | **Done** |
 | 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | **Done** (July 2026) — see "Phase 2 close-out" below for what shipped at cutover |
-| 3 | `apps/web`: browser adapter, static hosting, Playwright E2E suite | Planned |
+| 3 | `apps/web`: browser adapter, static hosting, Playwright E2E suite | **Done** (July 2026) — see "Phase 3 close-out" below |
 | 4 | Cloud sync (provider-agnostic), shared species libraries, multi-device sessions | Planned |
 
 ### Phase 2 close-out (shipped July 2026)
@@ -174,14 +174,38 @@ sessions) with pluggable backends, so no vendor is load-bearing.
    parity with the legacy lint level) over `packages/` and `apps/`;
    AGENTS.md gate and CI rewritten for the new toolchain.
 
-Phase 3 sizing note: the UI is already platform-clean, so web is
-essentially one deliverable — a `BrowserPlatformAdapter` (File System
-Access API with `<input type=file>`/download fallback,
-`persistentFileIds: false` + the existing relink flow) — plus a thin
-`apps/web` entry and the Playwright suite. The adapter contract,
-`InMemoryPlatformAdapter` semantics, and `electron.ts` pin down its
-expected behavior; crash-recovery autosave already works there because
-it lives in the adapter settings document, not localStorage.
+### Phase 3 close-out (shipped July 2026)
+
+The UI was already platform-clean, so web came down to one adapter plus
+a thin entry and an E2E suite:
+
+1. **`BrowserPlatformAdapter`** (`packages/ui/src/platform/browser.ts`)
+   — two runtime modes chosen by capability. On Chromium it uses the
+   File System Access API (real open/save pickers, `canOverwrite: true`
+   so Save rewrites the picked file). Elsewhere it falls back to
+   `<input type=file>` for opening and a download for saving
+   (`canOverwrite: false`, so the UI always saves via `saveSessionAs`,
+   and a download exposes no cancel signal so save/export always
+   "succeed"). `persistentFileIds: false` in both modes — `web:<n>` ids
+   die with the page, and reopened sessions recover images through the
+   existing relink flow. Settings (including the autosave snapshot)
+   persist to `localStorage`. File-dialog, downloader, and storage are
+   injectable for unit tests. One subtlety: the download fallback
+   revokes its object URL on a **deferred** timer — a synchronous revoke
+   can cancel the download before Chromium starts it.
+2. **Shared bootstrap** — `createQuadratorApp(adapter)`
+   (`packages/ui/src/app.ts`) builds the Pinia + Vuetify app once;
+   `apps/desktop` and `apps/web` differ only in which adapter they
+   construct. `apps/web` is a static Vite build (`base: './'`) with no
+   server component.
+3. **Playwright E2E** (`apps/web/e2e/`, `testIdAttribute: 'data-test'`)
+   — drives the adapter's **fallback** mode (the FS Access pickers can't
+   be automated; an init script deletes them before the app loads so the
+   adapter detects fallback capabilities at construction). Covers the
+   golden path (draw → tag → export with an exact CSV assertion),
+   QA-table/hotkey behavior, session save→reload→relink round-trip, and
+   the autosave "Continue Last Session" recovery. Menu actions live on
+   the Image Prep tab, so download flows switch to `tab-prep` first.
 
 Legacy components deliberately **not** ported (dead code, never
 mounted): `ZoomPanel.vue`, `TopBar.vue`, `HelloWorld.vue`. Deviations
@@ -213,7 +237,8 @@ Current state: unit suites for core (≥95% statement coverage enforced
 as a floor), including fast-check property tests; component suites for
 every Vue 3 component (stores, tabs, panels, and the image canvas —
 happy-dom, `InMemoryPlatformAdapter`, injected image sizer; conventions
-in AGENTS.md). E2E tests remain deferred to the Phase 3 web build.
+in AGENTS.md). E2E tests (Playwright, against the web build) cover the
+golden path, session round-trip, and crash-recovery flows (`apps/web/e2e/`).
 Visual verification of the desktop shell uses the `QUADRATOR_SHOT`
 screenshot hook rather than a snapshot suite (it works against the
 packaged binary too).
@@ -234,11 +259,15 @@ Planned, in rough order of value:
    while inputs are focused, QA-table behavior, tab gating, canvas
    drawing/tagging flows. **Done** — maintained as a standing practice,
    not a phase.
-4. **E2E** (Playwright against the web build, seeded RNG test hook):
-   golden path draw→tag→export with exact CSV assertion; polygon mode;
-   session round-trip; multi-image navigation with duplicate filenames;
-   species-CSV lifecycle; hotkeys; zoom/pan coordinate transforms. Plus
-   one Electron smoke test for shell/preload wiring.
+4. **E2E** (Playwright against the web build). **Done** for the core
+   flows (`apps/web/e2e/`): golden path draw→tag→export with an exact
+   CSV assertion (polygon mode), session save→reload→relink round-trip,
+   QA-table/hotkey behavior, and autosave "Continue Last Session"
+   recovery. Runs in the adapter's download/`<input>` fallback mode
+   (FS Access pickers can't be automated). Not yet covered:
+   multi-image navigation with duplicate filenames, full species-CSV
+   lifecycle, zoom/pan coordinate transforms, and an Electron smoke
+   test for shell/preload wiring.
 5. **Nice-to-have**: SVG snapshot tests of sampled layouts (geometry
    regressions become visible diffs); one-off mutation testing (Stryker)
    on core to find non-constraining assertions.

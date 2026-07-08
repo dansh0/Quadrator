@@ -4,6 +4,10 @@
   "private": true,
   "description": "Quadrator UI layer: Vue 3 + Vuetify 3 + Pinia, consuming @quadrator/core through a PlatformAdapter.",
   "type": "module",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./platform/browser": "./src/platform/browser.ts"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

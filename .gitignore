@@ -39,3 +39,8 @@ Installers
 /apps/desktop/dist
 /apps/desktop/renderer
 /apps/desktop/release
+
+# Web shell build output (apps/web)
+/apps/web/dist
+/apps/web/playwright-report
+/apps/web/test-results
