@@ -14,13 +14,15 @@
     "@types/d3-zoom": "^3.0.8",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/test-utils": "^2.4.11",
+    "happy-dom": "^20.10.6",
     "typescript": "^5.9.3",
     "vite": "^8.1.3",
+    "vitest": "^4.1.10",
     "vue-tsc": "^3.3.6"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
-    "@quadrator/core": "^0.1.0",
+    "@quadrator/core": "workspace:*",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
     "pinia": "^3.0.4",

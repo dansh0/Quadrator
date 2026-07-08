@@ -155,6 +155,33 @@ describe('splitByArea', () => {
     expectClose(area(remaining), total / 5, 1e-6);
   });
 
+  it('throws (never mis-cuts) when no single straight cut can hit the target (regression)', () => {
+    // fast-check counterexample: for some concave rings and targets NO
+    // straight cut with both endpoints on the boundary carves off the target
+    // area as one simple piece — a mathematical limitation of single-cut
+    // partitioning, not a numerical bug. The legacy library silently returned
+    // a wrong partition here (audit B9); core must fail loudly instead. The
+    // UI catches this and rejects the drawn boundary, leaving the quadrat
+    // untouched.
+    const ring: Ring = [
+      { x: 10.639957869023881, y: 0 },
+      { x: 4.8907380036690284, y: 1.0395584540887965 },
+      { x: 24.584705878340472, y: 6.1296556171336345 },
+      { x: 9.189193506198801, y: 10.205633309171539 },
+      { x: 4.418356939959577, y: 5.082738235555193 },
+      { x: -42.32003412817867, y: 26.444492298455625 },
+      { x: -6.723320139212043, y: 1.3068810470918863 },
+      { x: -14.581031684134084, y: 1.5325281845455154 },
+      { x: -29.717981701597495, y: -17.85636488147158 },
+      { x: -9.715762387726759, y: -11.57879473036506 },
+      { x: 9.690933599828817, y: -36.167056567337454 },
+      { x: 2.113091308703498, y: -4.531538935183249 },
+    ];
+    const target = area(ring) * 0.747823572393465;
+    expect(() => splitByArea(ring, target)).toThrow(GeometryError);
+    expect(() => splitByArea(ring, target)).toThrow('no valid cut');
+  });
+
   it('closed rings (duplicate last vertex) are tolerated', () => {
     const closed = [...unitSquare, { x: 0, y: 0 }];
     checkSplit(closed, 0.5);

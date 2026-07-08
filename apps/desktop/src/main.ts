@@ -8,6 +8,7 @@
  * - otherwise → the built UI at packages/ui/dist.
  * QUADRATOR_SMOKE=1 exits right after the window finishes loading (CI smoke).
  */
+import { parseSession } from '@quadrator/core';
 import { BrowserWindow, app, dialog, ipcMain, net, protocol } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -28,6 +29,32 @@ const IMAGE_FILTERS = [
 protocol.registerSchemesAsPrivileged([
   { scheme: IMAGE_SCHEME, privileges: { stream: true } },
 ]);
+
+/**
+ * Only paths the user has actually authorized — picked in a dialog, or named
+ * inside a session document the user opened (or the autosaved snapshot in
+ * settings) — may be read back by the renderer via qimg:// or image:load.
+ * This keeps a compromised renderer from using the shell to read arbitrary
+ * files.
+ */
+const allowedImagePaths = new Set<string>();
+
+function allowImagePath(filePath: string): void {
+  allowedImagePaths.add(path.resolve(filePath));
+}
+
+function isImagePathAllowed(filePath: string): boolean {
+  return allowedImagePaths.has(path.resolve(filePath));
+}
+
+/** Authorize the image paths named in session text; ignore unparseable text. */
+function allowSessionImages(text: string): void {
+  try {
+    for (const quadrat of parseSession(text).quadrats) allowImagePath(quadrat.imagePath);
+  } catch {
+    // Corrupt/unknown sessions grant nothing; the renderer surfaces the error.
+  }
+}
 
 function refFor(filePath: string): FileRefPlain {
   return { id: filePath, name: path.basename(filePath) };
@@ -66,7 +93,11 @@ function settingsPath(): string {
 }
 
 function registerIpc(win: BrowserWindow): void {
-  ipcMain.handle(CH.sessionOpen, () => openTextFile(win, 'Open session', SESSION_FILTERS));
+  ipcMain.handle(CH.sessionOpen, async () => {
+    const r = await openTextFile(win, 'Open session', SESSION_FILTERS);
+    if (r !== null) allowSessionImages(r.text);
+    return r;
+  });
 
   ipcMain.handle(CH.sessionSaveAs, (_e, text: string, suggestedName: string) =>
     saveTextFile(win, 'Save session', suggestedName, SESSION_FILTERS, text)
@@ -86,10 +117,13 @@ function registerIpc(win: BrowserWindow): void {
       filters: IMAGE_FILTERS,
       properties: ['openFile', 'multiSelections'],
     });
-    return r.canceled ? [] : r.filePaths.map(refFor);
+    if (r.canceled) return [];
+    for (const filePath of r.filePaths) allowImagePath(filePath);
+    return r.filePaths.map(refFor);
   });
 
   ipcMain.handle(CH.imageLoad, async (_e, id: string): Promise<string> => {
+    if (!isImagePathAllowed(id)) throw new Error(`image path not authorized: ${id}`);
     await fs.access(id); // reject unresolvable ids before handing out a URL
     return imageUrlFor(id);
   });
@@ -101,7 +135,9 @@ function registerIpc(win: BrowserWindow): void {
       properties: ['openFile'],
     });
     const filePath = r.filePaths[0];
-    return r.canceled || filePath === undefined ? null : refFor(filePath);
+    if (r.canceled || filePath === undefined) return null;
+    allowImagePath(filePath);
+    return refFor(filePath);
   });
 
   ipcMain.handle(CH.csvExport, (_e, text: string, suggestedName: string) =>
@@ -109,12 +145,18 @@ function registerIpc(win: BrowserWindow): void {
   );
 
   ipcMain.handle(CH.settingsLoad, async (): Promise<unknown> => {
+    let settings: unknown;
     try {
-      return JSON.parse(await fs.readFile(settingsPath(), 'utf8')) as unknown;
+      settings = JSON.parse(await fs.readFile(settingsPath(), 'utf8')) as unknown;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw e;
     }
+    // The crash-recovery snapshot lives in settings; authorize its images so
+    // "Continue Last Session" can display them after a restart.
+    const snapshot = (settings as { lastSessionText?: unknown } | null)?.lastSessionText;
+    if (typeof snapshot === 'string') allowSessionImages(snapshot);
+    return settings;
   });
 
   ipcMain.handle(CH.settingsSave, async (_e, value: unknown) => {
@@ -139,7 +181,11 @@ async function createWindow(): Promise<void> {
   const devUrl = process.env['QUADRATOR_DEV_URL'];
   if (devUrl) {
     await win.loadURL(devUrl);
+  } else if (app.isPackaged) {
+    // The renderer snapshot bundled by build.mjs, packaged next to dist/.
+    await win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   } else {
+    // Unpackaged: serve the UI build directly so it is never stale.
     await win.loadFile(
       path.join(__dirname, '..', '..', '..', 'packages', 'ui', 'dist', 'index.html')
     );
@@ -172,6 +218,7 @@ app.whenReady().then(() => {
   protocol.handle(IMAGE_SCHEME, (request) => {
     const filePath = new URL(request.url).searchParams.get('path');
     if (!filePath) return new Response('missing path', { status: 400 });
+    if (!isImagePathAllowed(filePath)) return new Response('path not authorized', { status: 403 });
     return net.fetch(pathToFileURL(filePath).toString());
   });
 

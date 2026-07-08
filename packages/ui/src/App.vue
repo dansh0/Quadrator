@@ -133,7 +133,7 @@ onUnmounted(() => {
                     </v-alert>
                     <p class="text-caption text-grey mb-1 mt-5">Beta Release v{{ appVersion }}</p>
                     <p class="text-caption text-grey mb-0">
-                      © 2025 Shores Design. All rights reserved.
+                      © 2026 Shores Design. All rights reserved.
                     </p>
                   </v-card-text>
                 </v-card>

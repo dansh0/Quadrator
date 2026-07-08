@@ -37,3 +37,5 @@ Installers
 
 # Desktop shell build output (apps/desktop)
 /apps/desktop/dist
+/apps/desktop/renderer
+/apps/desktop/release

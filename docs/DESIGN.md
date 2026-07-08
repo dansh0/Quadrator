@@ -19,11 +19,14 @@ never lose or silently corrupt user data; make sampling reproducible
 
 ```
 packages/core      @quadrator/core — platform-free domain logic (TS, done)
-packages/ui        @quadrator/ui — Vue 3 + Vuetify 3 + Pinia layer (Vite; in progress)
-apps/desktop       @quadrator/desktop — Electron shell, context-isolated preload (scaffolded)
-src/               legacy Vue 2 + Electron shell (to be replaced)
+packages/ui        @quadrator/ui — Vue 3 + Vuetify 3 + Pinia layer (Vite, done)
+apps/desktop       @quadrator/desktop — Electron shell, context-isolated preload (done, packaged with electron-builder)
 apps/web           planned: static web build of the same UI
 ```
+
+The legacy Vue 2 + Electron 13 app (`src/` and its Vue CLI toolchain)
+was retired at the Phase 2 cutover (July 2026) and lives only in git
+history.
 
 All domain logic lives in core and is UI- and platform-agnostic. Shells
 provide I/O through the **PlatformAdapter** interface (defined in
@@ -111,6 +114,32 @@ they are recomputed from the boundary + stored `rngSeed`, and rendered
 only if the recomputed points exactly match the stored samples, so
 settings drift can never display a misleading partition.
 
+### Desktop shell security posture
+
+The legacy shell ran with `nodeIntegration: true` and no context
+isolation — components `require()`d `fs`/`electron` directly, so any
+XSS or compromised renderer dependency was arbitrary code execution.
+The new shell (`apps/desktop`) closes this with three layers:
+`nodeIntegration: false` (renderer is pure web code),
+`contextIsolation: true` (only the `contextBridge`-published
+`window.quadrator` API is reachable), and `sandbox: true` (OS-level
+Chromium sandbox). All dialogs and file I/O live in the main process
+behind the enumerated IPC channels in `channels.ts`; local images are
+streamed via the custom `qimg://local/?path=…` protocol instead of
+weakening `webSecurity`.
+
+The `qimg` handler and the `image:load` channel only serve paths on a
+main-process **allowlist**, populated exclusively by user action:
+images picked in a dialog, the relink dialog, image paths named in a
+session file the user opened, and (so "Continue Last Session" works
+after a restart) paths in the autosaved snapshot loaded from the
+settings document. Everything else gets a 403 — verified against the
+packaged build. Residual (accepted): a compromised renderer could
+write a crafted snapshot via `settings:save` and have its paths
+authorized on the *next* launch; scoping that further would mean the
+main process validating session provenance, which the threat model
+doesn't currently justify.
+
 Cloud features (later phases) are **provider-agnostic**: a small sync
 interface (auth, blob storage for images, document storage for
 sessions) with pluggable backends, so no vendor is load-bearing.
@@ -121,9 +150,57 @@ sessions) with pluggable backends, so no vendor is load-bearing.
 |---|---|---|
 | 0 | Data-safety hotfixes on the legacy app; capture real fixture files; initial unit suite | **Done** |
 | 1 | Extract `@quadrator/core` (geometry, sampling, CSV, species, versioned sessions) with full test suite; npm workspaces; CI typecheck gate | **Done** |
-| 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | **In progress** — adapter contract, ui scaffold, Electron shell, all screens, image canvas, and the feature-parity audit done (gaps closed: crash-recovery autosave + Continue Last Session, load-session overwrite confirm, home-screen version footer); remaining: cutover (retire `src/`, pnpm, ESLint flat config) |
+| 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | **Done** (July 2026) — see "Phase 2 close-out" below for what shipped at cutover |
 | 3 | `apps/web`: browser adapter, static hosting, Playwright E2E suite | Planned |
 | 4 | Cloud sync (provider-agnostic), shared species libraries, multi-device sessions | Planned |
+
+### Phase 2 close-out (shipped July 2026)
+
+1. **Packaging** — `apps/desktop` is packaged by electron-builder
+   (config in its `package.json` `build` field; icons in
+   `apps/desktop/build/`; AppImage/nsis/dmg targets). `build.mjs`
+   snapshots the built UI into `apps/desktop/renderer/`, which ships
+   inside the asar; unpackaged runs load `packages/ui/dist` directly so
+   they are never stale. Verified end-to-end against the packaged
+   Linux binary (boot, session restore, `qimg://` serving and 403s).
+2. **Acceptance** — passed (full tagging-session review by the primary
+   user against the working build).
+3. **Cutover cleanup** — legacy `src/`, `tests/unit/`, `public/` and
+   the Vue CLI/webpack/Vue 2 toolchain deleted (`tests/fixtures/` kept
+   forever — core migration tests anchor on it); `qimg` allowlist
+   hardening applied (see §2); pnpm workspaces (`pnpm-workspace.yaml`;
+   dependency build scripts gated by `allowBuilds`); ESLint flat
+   config (`eslint.config.mjs`, typescript-eslint + `vue/essential`
+   parity with the legacy lint level) over `packages/` and `apps/`;
+   AGENTS.md gate and CI rewritten for the new toolchain.
+
+Phase 3 sizing note: the UI is already platform-clean, so web is
+essentially one deliverable — a `BrowserPlatformAdapter` (File System
+Access API with `<input type=file>`/download fallback,
+`persistentFileIds: false` + the existing relink flow) — plus a thin
+`apps/web` entry and the Playwright suite. The adapter contract,
+`InMemoryPlatformAdapter` semantics, and `electron.ts` pin down its
+expected behavior; crash-recovery autosave already works there because
+it lives in the adapter settings document, not localStorage.
+
+Legacy components deliberately **not** ported (dead code, never
+mounted): `ZoomPanel.vue`, `TopBar.vue`, `HelloWorld.vue`. Deviations
+from legacy, all documented in place: CSV export writes a complete
+file instead of appending (`packages/ui/src/export.ts`); polygon close
+needs ≥3 nodes; duplicate image paths get separate quadrats; autosave
+also writes the trailing edit.
+
+Known geometry limitation (found by property testing at cutover): for
+some concave rings and target fractions **no single straight cut**
+between two boundary edges can carve off the target area — a
+mathematical property of single-cut partitioning, not a numerical bug.
+`splitByArea` throws a typed `GeometryError` (the legacy library
+silently returned a wrong partition here — audit B9), the UI rejects
+the drawn boundary and leaves the quadrat untouched, and the user
+redraws. Pinned counterexample in `packages/core/tests/split.spec.ts`;
+the property tests treat this outcome as a documented pass. A fallback
+partitioning strategy (e.g. multi-segment cuts) is a possible future
+enhancement if field use ever hits it.
 
 Future feature aims (design hooks exist; build later): reproducible
 resampling from stored seeds, annotation overlays, per-project species
@@ -133,12 +210,13 @@ summaries beyond per-quadrat coverage.
 ## 5. Testing strategy
 
 Current state: unit suites for core (≥95% statement coverage enforced
-as a floor) and the legacy modules that carry data-safety fixes;
-component suites for every Vue 3 component (stores, tabs, panels, and
-the image canvas — happy-dom, `InMemoryPlatformAdapter`, injected image
-sizer; conventions in AGENTS.md). E2E tests remain deferred to the
-Phase 3 web build. Visual verification of the desktop shell uses the
-`QUADRATOR_SHOT` screenshot hook rather than a snapshot suite.
+as a floor), including fast-check property tests; component suites for
+every Vue 3 component (stores, tabs, panels, and the image canvas —
+happy-dom, `InMemoryPlatformAdapter`, injected image sizer; conventions
+in AGENTS.md). E2E tests remain deferred to the Phase 3 web build.
+Visual verification of the desktop shell uses the `QUADRATOR_SHOT`
+screenshot hook rather than a snapshot suite (it works against the
+packaged binary too).
 
 Planned, in rough order of value:
 
@@ -148,7 +226,9 @@ Planned, in rough order of value:
 2. **Property-based tests** (fast-check) on `splitByArea` and
    serialization round-trips: random simple polygons/sessions, assert
    invariants (piece areas sum to total; cut endpoints on the ring;
-   parse∘serialize = identity).
+   parse∘serialize = identity). **Done** — see
+   `packages/core/tests/property.spec.ts`; counterexamples get pinned
+   as example-based regressions when found.
 3. **Component tests** (Vitest + @vue/test-utils + happy-dom) alongside
    each new Vue 3 component: species-button/store sync, hotkey gating
    while inputs are focused, QA-table behavior, tab gating, canvas

@@ -1,81 +1,27 @@
 {
   "name": "quadrator",
-  "version": "0.1.16",
+  "version": "0.2.0",
   "private": true,
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
+  "packageManager": "pnpm@11.10.0",
   "scripts": {
-    "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint src",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "dev:ui": "npm -w @quadrator/ui run dev",
-    "dev:desktop": "npm -w @quadrator/ui run build && npm -w @quadrator/desktop run start",
     "test:watch": "vitest",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "electron:build": "vue-cli-service electron:build",
-    "electron:serve": "vue-cli-service electron:serve",
-    "postinstall": "electron-builder install-app-deps",
-    "postuninstall": "electron-builder install-app-deps"
-  },
-  "main": "background.js",
-  "dependencies": {
-    "@mdi/font": "^6.6.95",
-    "core-js": "^3.8.3",
-    "csv-parser": "^3.0.0",
-    "d3": "^7.3.0",
-    "electron": "^13.6.9",
-    "electron-devtools-installer": "^3.1.0",
-    "lodash": "^4.17.21",
-    "path": "^0.12.7",
-    "robust-point-in-polygon": "^1.0.3",
-    "vue": "^2.6.14",
-    "vuetify": "^2.2.11",
-    "vuex": "^3.1.2"
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "dev:ui": "pnpm --filter @quadrator/ui dev",
+    "dev:desktop": "pnpm --filter @quadrator/ui build && pnpm --filter @quadrator/desktop start",
+    "package:desktop": "pnpm --filter @quadrator/ui build && pnpm --filter @quadrator/desktop dist"
   },
   "devDependencies": {
-    "@babel/core": "^7.12.16",
-    "@babel/eslint-parser": "^7.12.16",
+    "@eslint/js": "^10.0.1",
     "@vitest/coverage-v8": "^4.1.10",
-    "@vue/cli-plugin-babel": "~5.0.0",
-    "@vue/cli-plugin-eslint": "~5.0.0",
-    "@vue/cli-service": "~5.0.0",
-    "cross-env": "^7.0.3",
-    "deepmerge": "^4.2.2",
-    "electron": "^13.0.0",
-    "electron-devtools-installer": "^3.1.0",
-    "eslint": "^7.32.0",
-    "eslint-plugin-vue": "^8.0.3",
+    "eslint": "^10.6.0",
+    "eslint-plugin-vue": "^10.9.2",
     "fast-check": "^4.8.0",
+    "globals": "^17.7.0",
     "happy-dom": "^20.10.6",
-    "sass": "^1.32.13",
-    "sass-loader": "^8.0.2",
-    "vitest": "^4.1.10",
-    "vue-cli-plugin-electron-builder": "~2.1.1",
-    "vue-template-compiler": "^2.6.14"
-  },
-  "eslintConfig": {
-    "root": true,
-    "env": {
-      "node": true
-    },
-    "extends": [
-      "plugin:vue/essential",
-      "eslint:recommended"
-    ],
-    "parserOptions": {
-      "parser": "@babel/eslint-parser"
-    },
-    "rules": {
-      "no-unused-vars": "off"
-    }
-  },
-  "browserslist": [
-    "> 1%",
-    "last 2 versions",
-    "not dead"
-  ]
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
+  }
 }

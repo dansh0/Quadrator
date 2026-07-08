@@ -1,21 +1,55 @@
 {
   "name": "@quadrator/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Quadrator desktop shell: Electron with context isolation; implements PlatformAdapter over typed IPC.",
+  "author": "Shores Design",
+  "desktopName": "quadrator.desktop",
   "main": "dist/main.js",
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
-    "start": "npm run build && electron .",
-    "dev": "npm run build && QUADRATOR_DEV_URL=http://localhost:5173 electron ."
+    "start": "node build.mjs && electron .",
+    "dev": "node build.mjs && QUADRATOR_DEV_URL=http://localhost:5173 electron .",
+    "dist": "node build.mjs --require-renderer && electron-builder",
+    "dist:dir": "node build.mjs --require-renderer && electron-builder --dir"
   },
   "dependencies": {
-    "@quadrator/core": "^0.1.0"
+    "@quadrator/core": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "electron": "^43.0.0",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.28.1",
     "typescript": "^5.9.3"
+  },
+  "build": {
+    "appId": "design.shores.quadrator",
+    "productName": "Quadrator",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "renderer/**",
+      "package.json"
+    ],
+    "linux": {
+      "target": ["AppImage"],
+      "executableName": "quadrator",
+      "icon": "build/icon.png",
+      "category": "Science",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "build/icon.png"
+    }
   }
 }
