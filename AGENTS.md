@@ -11,6 +11,9 @@ Companion docs (read before non-trivial work):
 
 - [`docs/STYLE_GUIDE.md`](docs/STYLE_GUIDE.md) — code style and technical requirements.
 - [`docs/DESIGN.md`](docs/DESIGN.md) — architecture, domain model, roadmap.
+- [`docs/CLOUD.md`](docs/CLOUD.md) — the decided Phase 4 cloud architecture
+  (stack, data model, costs). Read before any cloud/sync work; nothing in
+  it is built yet.
 
 ## Hard rules
 
@@ -46,8 +49,11 @@ Other commands:
 - `pnpm package:desktop` — build the full distributable
   (`apps/desktop/release/`, AppImage on Linux). `dist:dir` builds the
   unpacked directory only, which is faster and what the gate uses.
-- `pnpm --filter @quadrator/web dev` — the UI in a browser on the
-  `BrowserPlatformAdapter` (real File System Access pickers on Chromium).
+- `pnpm dev:web` (alias for `pnpm --filter @quadrator/web dev`) — the
+  **web app** in a browser on the `BrowserPlatformAdapter` (real File
+  System Access pickers on Chromium, `<input type=file>` on Firefox).
+  Note `pnpm dev:ui` is a different thing: the UI harness on the
+  in-memory adapter, whose file pickers are inert no-ops.
 - `pnpm --filter @quadrator/web e2e` — Playwright E2E. Its `webServer`
   runs `pnpm build && pnpm preview` on port 4173; needs a Chromium
   browser (`pnpm --filter @quadrator/web exec playwright install
@@ -91,6 +97,10 @@ Other commands:
   the packaged binary too (`apps/desktop/release/linux-unpacked/quadrator`).
 - In dev builds the page exposes `window.__quadratorPinia` for
   inspecting/seeding stores from shot scripts or the console.
+- There is **no application menu** (removed deliberately — see
+  `docs/DESIGN.md` §2 "Desktop window chrome"). DevTools is still
+  reachable with F12 or Ctrl+Shift+I, registered on the window itself;
+  Reload is intentionally gone, so restart the app to pick up a rebuild.
 
 ## Repository layout
 
@@ -120,9 +130,12 @@ if ever needed.
   `tsc --noEmit`. The built UI is snapshotted into
   `apps/desktop/renderer/` for packaging; unpackaged runs load
   `packages/ui/dist` directly.
-- Root `package.json` version is the app version shown in the UI
-  footer; keep `apps/desktop/package.json` (what packaged builds
-  report) and `apps/web/package.json` in sync when bumping.
+- Root `package.json` holds the **single source of truth** for the app
+  version: `App.vue` imports it for the UI footer, and
+  `apps/desktop/build.mjs` copies it into `apps/desktop/package.json`
+  (what packaged builds report) on every build, logging when it changes
+  — commit that one-line change with the bump. `apps/web/package.json`'s
+  version is inert metadata; nothing reads it.
 
 ## Working conventions
 

@@ -140,9 +140,30 @@ authorized on the *next* launch; scoping that further would mean the
 main process validating session provenance, which the threat model
 doesn't currently justify.
 
+### Desktop window chrome
+
+The shell installs **no application menu** (`Menu.setApplicationMenu(null)`
+in `createWindow`). Electron's default menu was never customized, and its
+View roles — Reload, Force Reload, Zoom — are actively harmful here: a
+reload discards the in-memory session, and page zoom desyncs the canvas
+from its fitted-pixel coordinate math. Nothing else in the default menu is
+part of the workflow; the app's own actions live in `MenuButtons` on the
+Image Prep tab.
+
+Removing the menu also removes the accelerators it owned, so DevTools is
+re-registered directly on the window via `before-input-event` (F12 and
+Ctrl+Shift+I). That is deliberately the only shortcut restored — Reload
+stays gone. Note the trade-off if macOS is ever shipped: on darwin the
+clipboard accelerators (Cmd+C/V/A) come from the Edit menu role, so a mac
+build would need a minimal `[{role:'appMenu'},{role:'editMenu'}]` instead
+of `null`.
+
 Cloud features (later phases) are **provider-agnostic**: a small sync
 interface (auth, blob storage for images, document storage for
 sessions) with pluggable backends, so no vendor is load-bearing.
+The concrete Phase 4 architecture — stack, data model, cost curve,
+security posture — is decided in [`CLOUD.md`](CLOUD.md); none of it is
+built yet.
 
 ## 4. Roadmap
 
@@ -152,7 +173,7 @@ sessions) with pluggable backends, so no vendor is load-bearing.
 | 1 | Extract `@quadrator/core` (geometry, sampling, CSV, species, versioned sessions) with full test suite; npm workspaces; CI typecheck gate | **Done** |
 | 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | **Done** (July 2026) — see "Phase 2 close-out" below for what shipped at cutover |
 | 3 | `apps/web`: browser adapter, static hosting, Playwright E2E suite | **Done** (July 2026) — see "Phase 3 close-out" below |
-| 4 | Cloud sync (provider-agnostic), shared species libraries, multi-device sessions | Planned |
+| 4 | Cloud sync (provider-agnostic), shared species libraries, multi-device sessions | Planned — architecture decided in [`CLOUD.md`](CLOUD.md), nothing built |
 
 ### Phase 2 close-out (shipped July 2026)
 

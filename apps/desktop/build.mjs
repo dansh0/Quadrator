@@ -10,15 +10,41 @@
  * only ever ship inside an explicitly built package.
  * `--require-renderer` (used by the dist scripts) makes a missing UI build a
  * hard error instead of a warning.
+ *
+ * Also keeps this package's `version` equal to the root package.json, which
+ * is the single source of truth (the UI footer imports it). electron-builder
+ * reads the version from here, so without this sync a packaged build would
+ * report a stale number after a root-only bump.
  */
 import { build } from 'esbuild';
-import { cpSync, existsSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const uiDist = path.join(here, '..', '..', 'packages', 'ui', 'dist');
 const renderer = path.join(here, 'renderer');
+
+syncVersionFromRoot();
+
+/**
+ * Copy the root version into apps/desktop/package.json when they differ,
+ * preserving formatting elsewhere by rewriting only that one field.
+ */
+function syncVersionFromRoot() {
+  const rootPath = path.join(here, '..', '..', 'package.json');
+  const ownPath = path.join(here, 'package.json');
+  const rootVersion = JSON.parse(readFileSync(rootPath, 'utf8')).version;
+  const ownText = readFileSync(ownPath, 'utf8');
+  const ownVersion = JSON.parse(ownText).version;
+  if (rootVersion === ownVersion) return;
+  writeFileSync(
+    ownPath,
+    ownText.replace(/("version"\s*:\s*)"[^"]*"/, `$1"${rootVersion}"`),
+    'utf8'
+  );
+  console.log(`version: synced ${ownVersion} → ${rootVersion} from the root package.json`);
+}
 
 await build({
   entryPoints: ['src/main.ts', 'src/preload.ts'],

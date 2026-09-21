@@ -12,6 +12,14 @@ const fixtures = [
   'session-v0-multi-image.json',
 ].map((name) => [name, readFileSync(`tests/fixtures/${name}`, 'utf8')] as const);
 
+/**
+ * A real session in the format the app writes today (produced by migrating
+ * session-v0-multi-image.json and saving). v0 fixtures only prove the
+ * migration path; this one pins the v1 reader against a file on disk, so a
+ * future schema version can never quietly stop loading current saves.
+ */
+const v1Fixture = readFileSync('tests/fixtures/session-v1-multi-image.json', 'utf8');
+
 function v0Of(json: string) {
   return sessionV0Schema.parse(JSON.parse(json));
 }
@@ -71,6 +79,33 @@ describe('v0 fixtures (real sessions)', () => {
     expect(q.boundary).toHaveLength(4);
     expect(q.name).toBe('B3_1Y_T1');
     expect(v1.settings).toEqual({ numOfSampleRows: 5, numOfSampleCols: 5, restrictToQuad: false });
+  });
+});
+
+describe('v1 fixture (the format the app writes today)', () => {
+  it('loads without migration and is already v1', () => {
+    const v1 = parseSession(v1Fixture);
+    expect(sessionV1Schema.parse(v1)).toEqual(v1);
+    expect(v1.schemaVersion).toBe(1);
+  });
+
+  it('round-trips byte-identically (stable key order, no data drift)', () => {
+    const v1 = parseSession(v1Fixture);
+    expect(serializeSession(v1)).toBe(v1Fixture.trimEnd());
+  });
+
+  it('carries both boundary kinds and its tagged samples', () => {
+    const v1 = parseSession(v1Fixture);
+    expect(v1.quadrats.map((q) => q.boundary.length)).toEqual([4, 7]);
+    expect(v1.quadrats.every((q) => q.geoDefined)).toBe(true);
+    expect(v1.quadrats.flatMap((q) => q.samples)).toHaveLength(50);
+    expect(v1.quadrats.flatMap((q) => q.samples).filter((s) => s.codes.length > 0)).toHaveLength(8);
+    expect(v1.currentQuadratId).toBe('q2');
+  });
+
+  it('agrees exactly with migrating the v0 session it came from', () => {
+    const fromV0 = migrateV0(v0Of(fixtures[2]![1]), new Date('2026-07-09T12:00:00.000Z'));
+    expect(parseSession(v1Fixture)).toEqual(fromV0);
   });
 });
 

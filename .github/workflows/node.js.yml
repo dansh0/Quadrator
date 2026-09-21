@@ -1,11 +1,13 @@
-# CI: lint + typecheck + tests on every push/PR to main; version bump and
-# Windows installer build on pushes to main.
+# CI: lint, typecheck, unit tests (with the core coverage floor) and the
+# Playwright E2E suite run on pushes to main and to the active work branch,
+# and on every PR to main. Version bump and Windows installer build run on
+# main only.
 
 name: Node.js CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, july_2026_review ]
   pull_request:
     branches: [ main ]
 
@@ -35,8 +37,8 @@ jobs:
         run: pnpm lint
       - name: "Typecheck (all workspaces)"
         run: pnpm typecheck
-      - name: "Unit tests"
-        run: pnpm test
+      - name: "Unit tests (+ core coverage floor)"
+        run: pnpm test:coverage
 
   e2e:
     name: "Web E2E (Playwright)"
@@ -70,6 +72,7 @@ jobs:
   bump-version:
     name: "Bump Version"
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
 
@@ -83,6 +86,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Best-effort convenience: bumps the ROOT package.json patch version
+      # only (the single source of truth). apps/desktop/package.json picks it
+      # up at build time via apps/desktop/build.mjs. Left non-blocking on
+      # purpose — a failed bump must not fail the build of a good commit.
       - name: "Automated Version Bump"
         run: |
           git config --local user.email "action@github.com"
@@ -102,6 +109,7 @@ jobs:
   build-exe:
     name: "Build Quadrator (Windows installer)"
     runs-on: windows-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: "Checkout source code"
@@ -116,7 +124,6 @@ jobs:
       - name: "Install dependencies"
         run: pnpm install --frozen-lockfile
       - name: "Build installer"
-        continue-on-error: true
         run: pnpm package:desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

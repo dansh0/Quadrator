@@ -4,12 +4,17 @@
  * only through the preload bridge (see preload.ts / PlatformAdapter in core).
  *
  * Renderer source:
- * - QUADRATOR_DEV_URL set → Vite dev server (run `npm -w @quadrator/ui run dev`).
+ * - QUADRATOR_DEV_URL set → Vite dev server (run `pnpm dev:ui`).
  * - otherwise → the built UI at packages/ui/dist.
  * QUADRATOR_SMOKE=1 exits right after the window finishes loading (CI smoke).
+ *
+ * The application menu is removed entirely (see createWindow): its default
+ * roles — View → Reload / Force Reload / Zoom — discard the in-memory session
+ * or desync the canvas, and nothing else in it is used. DevTools keeps its
+ * own accelerators, registered directly on the window.
  */
 import { parseSession } from '@quadrator/core';
-import { BrowserWindow, app, dialog, ipcMain, net, protocol } from 'electron';
+import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -165,6 +170,11 @@ function registerIpc(win: BrowserWindow): void {
 }
 
 async function createWindow(): Promise<void> {
+  // No application menu at all: the default one's Reload/Zoom roles break a
+  // canvas session, and none of its actions are used. This also drops the
+  // accelerators the menu used to own, so DevTools is re-registered below.
+  Menu.setApplicationMenu(null);
+
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -174,6 +184,20 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  // DevTools accelerators (F12 / Ctrl+Shift+I), which the removed View menu
+  // used to provide. Deliberately the only shortcut restored — Reload stays
+  // gone. `before-input-event` sees keys before the page, so the renderer
+  // cannot swallow them.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const isF12 = input.key === 'F12';
+    const isInspect = input.control && input.shift && input.key.toLowerCase() === 'i';
+    if (isF12 || isInspect) {
+      win.webContents.toggleDevTools();
+      event.preventDefault();
+    }
   });
 
   registerIpc(win);

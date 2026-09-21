@@ -10,6 +10,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "dev:ui": "pnpm --filter @quadrator/ui dev",
+    "dev:web": "pnpm --filter @quadrator/web dev",
     "dev:desktop": "pnpm --filter @quadrator/ui build && pnpm --filter @quadrator/desktop start",
     "package:desktop": "pnpm --filter @quadrator/ui build && pnpm --filter @quadrator/desktop dist"
   },

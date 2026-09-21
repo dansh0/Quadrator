@@ -1,7 +1,8 @@
 # Style Guide & Technical Requirements
 
-Two regimes coexist. New domain logic goes in `packages/core` under the
-strict regime; the legacy app in `src/` is maintenance-only.
+Two regimes coexist. Domain logic goes in `packages/core` under the
+strict, platform-free regime; the UI layer and the two app shells follow
+the shell regime in §2. All new domain logic belongs in core.
 
 ## 1. `packages/core` (`@quadrator/core`) — strict regime
 
@@ -16,7 +17,7 @@ strict regime; the legacy app in `src/` is maintenance-only.
   explicit named exports. Consumers import from the package root only.
 
 ### Platform independence (the defining constraint)
-- **No platform APIs in `src/`**: no `fs`, `path`, Electron, DOM, or
+- **No platform APIs in `packages/core/src/`**: no `fs`, `path`, Electron, DOM, or
   globals beyond the ECMAScript standard library. Core must run
   unchanged in Node, browsers, and workers. (Tests may use `node:fs`
   for fixtures.)
@@ -39,15 +40,28 @@ strict regime; the legacy app in `src/` is maintenance-only.
 - Adding a runtime dependency to core requires strong justification;
   it must itself be platform-free. Current allowance: `zod`.
 
-## 2. Legacy app (`src/`) — maintenance regime
+## 2. `packages/ui` and `apps/*` — shell regime
 
-- Vue 2.6 SFCs, Vuetify 2, Vuex 3, Options API, ESLint 7
-  (`plugin:vue/essential` + `eslint:recommended`). Match existing style.
-- Bug fixes and safety fixes only; no refactors, no new features, no
-  dependency upgrades. The codebase is scheduled for replacement
-  (see `DESIGN.md`).
-- Do not modify `src/assets/poly-split-js-master/` (vendored, replaced
-  by core, still imported by the running app).
+- Vue 3.5 SFCs with `<script setup lang="ts">`, Vuetify 3, Pinia 3,
+  Vite. Composition API throughout; no Options API in new components.
+- TypeScript with the same strictness as core (`vue-tsc --noEmit` must
+  stay clean in every workspace). ESLint 10 flat config
+  (`eslint.config.mjs`, typescript-eslint + `vue/flat/essential`).
+- **Platform I/O only through `PlatformAdapter`.** No `fs`, no Electron
+  imports, no `window.quadrator` reach-through in `packages/ui` — the
+  same UI has to run in Electron, in a browser, and against
+  `InMemoryPlatformAdapter` in tests. Shell-specific code lives in
+  `packages/ui/src/platform/` (one adapter per target) and in
+  `apps/desktop/src/` (main + preload).
+- Keep math and drawing rules pure and DOM-free in
+  `packages/ui/src/canvas.ts` rather than inside components, so they
+  are testable without happy-dom.
+- Every interactive element gets a `data-test` attribute; component
+  tests and the Playwright suite select on those, never on classes or
+  Vuetify internals.
+- The Electron main process owns all filesystem and dialog access and
+  serves images only through the `qimg://` allowlist; the renderer
+  stays sandboxed with context isolation (`DESIGN.md` §2).
 
 ## 3. Tests (both regimes; Vitest 4)
 
