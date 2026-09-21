@@ -8,13 +8,13 @@
 import {
   CSV_HEADER,
   PlatformAdapter,
-  SessionV1,
+  SessionV2,
   SpeciesEntry,
   quadratCsvRows,
 } from '@quadrator/core';
 
 export function buildSessionCsv(
-  session: SessionV1,
+  session: SessionV2,
   species: readonly SpeciesEntry[],
   now: Date = new Date()
 ): string {
@@ -39,7 +39,7 @@ export function buildSessionCsv(
 /** Interactive export of every quadrat in the session. False = cancelled. */
 export async function exportSessionCsv(
   platform: PlatformAdapter,
-  session: SessionV1,
+  session: SessionV2,
   species: readonly SpeciesEntry[],
   now: Date = new Date()
 ): Promise<boolean> {

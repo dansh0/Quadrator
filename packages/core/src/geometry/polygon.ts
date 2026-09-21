@@ -113,6 +113,70 @@ export function bbox(ring: Ring): { min: Vec2; max: Vec2 } {
   return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
 }
 
+/**
+ * Area-weighted centroid of a simple ring. For a convex ring this is the
+ * visual centre; for a concave one it can fall OUTSIDE the ring, so callers
+ * that need a point in the interior use `interiorPoint`.
+ */
+export function centroid(ring: Ring): Vec2 {
+  const n = ring.length;
+  if (n < 3) throw new GeometryError(`centroid requires at least 3 vertices, got ${n}`);
+
+  let twiceArea = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < n; i++) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % n]!;
+    const cross = a.x * b.y - b.x * a.y;
+    twiceArea += cross;
+    cx += (a.x + b.x) * cross;
+    cy += (a.y + b.y) * cross;
+  }
+  if (Math.abs(twiceArea) < GEOM_EPS * GEOM_EPS) {
+    throw new GeometryError('centroid of a degenerate (zero-area) ring');
+  }
+  return { x: cx / (3 * twiceArea), y: cy / (3 * twiceArea) };
+}
+
+/**
+ * A deterministic point strictly inside a simple ring — the centroid when it
+ * lands inside, otherwise the midpoint of the widest interior span of the
+ * horizontal line through the centroid. Concave pieces (which equal-area
+ * splitting produces routinely) can push the centroid outside the ring, and a
+ * sample point outside its own cell would be silently wrong data.
+ */
+export function interiorPoint(ring: Ring): Vec2 {
+  const c = centroid(ring);
+  if (isPointInside(ring, c)) return c;
+
+  // Crossings of the scanline y = c.y with the ring's edges, in x order.
+  const n = ring.length;
+  const xs: number[] = [];
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const a = ring[i]!;
+    const b = ring[j]!;
+    if (a.y > c.y !== b.y > c.y) {
+      xs.push(((b.x - a.x) * (c.y - a.y)) / (b.y - a.y) + a.x);
+    }
+  }
+  xs.sort((p, q) => p - q);
+
+  // Interior spans of a simple polygon alternate, starting at the first
+  // crossing: [x0,x1] is inside, [x1,x2] is outside, and so on.
+  let best: { mid: number; width: number } | null = null;
+  for (let i = 0; i + 1 < xs.length; i += 2) {
+    const width = xs[i + 1]! - xs[i]!;
+    if (best === null || width > best.width) {
+      best = { mid: (xs[i]! + xs[i + 1]!) / 2, width };
+    }
+  }
+  if (best === null || best.width <= GEOM_EPS) {
+    throw new GeometryError('no interior point found: ring is degenerate or self-intersecting');
+  }
+  return { x: best.mid, y: c.y };
+}
+
 function orient(a: Vec2, b: Vec2, c: Vec2): number {
   return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }

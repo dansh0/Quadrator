@@ -1,21 +1,23 @@
 /**
- * Session store: owns the loaded SessionV1 and its file binding. All disk
+ * Session store: owns the loaded SessionV2 and its file binding. All disk
  * traffic goes through the PlatformAdapter passed into the actions; the
  * store itself stays platform-free and fully unit-testable with
  * InMemoryPlatformAdapter.
  */
 import {
   FileRef,
+  GridOrigin,
   PlatformAdapter,
-  QuadratV1,
-  SampleV1,
-  SessionV1,
+  QuadratShape,
+  QuadratV2,
+  SampleV2,
+  SamplingMode,
+  SessionV2,
   Vec2,
   mulberry32,
   parseSession,
+  planSamples,
   randomSeed,
-  samplePolygon,
-  sampleRect,
   serializeSession,
 } from '@quadrator/core';
 import { defineStore } from 'pinia';
@@ -28,18 +30,24 @@ function imageBaseName(name: string): string {
 }
 
 export interface SessionState {
-  session: SessionV1 | null;
+  session: SessionV2 | null;
   /** File the session was loaded from / last saved to; null = never saved. */
   fileRef: FileRef | null;
   /** Unsaved changes since the last open/save. */
   dirty: boolean;
 }
 
-export function emptySession(now: Date = new Date()): SessionV1 {
+export function emptySession(now: Date = new Date()): SessionV2 {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     savedAt: now.toISOString(),
-    settings: { numOfSampleRows: 5, numOfSampleCols: 5, restrictToQuad: false },
+    settings: {
+      numOfSampleRows: 5,
+      numOfSampleCols: 5,
+      sampling: 'stratified-random',
+      shape: 'n-poly',
+      gridOrigin: 'center',
+    },
     quadrats: [],
     currentQuadratId: null,
   };
@@ -110,7 +118,7 @@ export const useSessionStore = defineStore('session', {
      * audit B3). Creates a session first when none exists. Returns the new
      * quadrats (empty = cancelled).
      */
-    async addImages(platform: PlatformAdapter, now: Date = new Date()): Promise<QuadratV1[]> {
+    async addImages(platform: PlatformAdapter, now: Date = new Date()): Promise<QuadratV2[]> {
       const refs = await platform.pickImages();
       if (refs.length === 0) return [];
       if (this.session === null) this.newSession(now);
@@ -118,7 +126,7 @@ export const useSessionStore = defineStore('session', {
 
       const used = new Set(session.quadrats.map((q) => q.id));
       let n = session.quadrats.length + 1;
-      const added: QuadratV1[] = refs.map((ref) => {
+      const added: QuadratV2[] = refs.map((ref) => {
         while (used.has(`q${n}`)) n++;
         used.add(`q${n}`);
         return {
@@ -128,6 +136,11 @@ export const useSessionStore = defineStore('session', {
           boundary: [],
           geoDefined: false,
           rngSeed: null,
+          // Session settings are the default until a boundary is drawn, at
+          // which point defineBoundary records what was actually used.
+          sampling: session.settings.sampling,
+          shape: session.settings.shape,
+          gridOrigin: session.settings.gridOrigin,
           samples: [],
         };
       });
@@ -158,24 +171,23 @@ export const useSessionStore = defineStore('session', {
      * Commit a drawn boundary (OPEN ring, image-normalized 0–1 coords — the
      * legacy coordinate convention) on the current quadrat and generate its
      * sample points with a fresh stored seed, so the layout is reproducible.
-     * Quad-restricted settings or a 4-vertex ring use stratified rect
-     * sampling; anything else uses equal-area polygon sampling. Geometry
-     * errors (e.g. a self-intersecting ring) propagate to the caller and
-     * leave the quadrat untouched.
+     * The sampling mode, shape and grid origin in force are recorded ON the
+     * quadrat: session settings are only a default for the next boundary, so
+     * without this a quadrat's layout could not be reproduced once the user
+     * changed modes. Geometry errors (e.g. a self-intersecting ring)
+     * propagate to the caller and leave the quadrat untouched.
      */
     defineBoundary(ring: Vec2[], seed: number = randomSeed()): void {
       const quadrat = this.currentQuadrat;
       const settings = this.session?.settings;
       if (quadrat === null || settings === undefined) return;
 
-      const n = settings.numOfSampleRows * settings.numOfSampleCols;
-      const rng = mulberry32(seed);
-      const points =
-        settings.restrictToQuad || ring.length === 4
-          ? sampleRect(ring, settings.numOfSampleRows, settings.numOfSampleCols, rng)
-          : samplePolygon(ring, n, rng).points;
+      // Throws before anything is written, so a rejected ring leaves the
+      // quadrat exactly as it was. regular-grid ignores the rng, but the seed
+      // is still stored so switching modes later stays reproducible.
+      const { points } = planSamples(ring, settings, mulberry32(seed));
 
-      const samples: SampleV1[] = points.map((p, index) => ({
+      const samples: SampleV2[] = points.map((p, index) => ({
         index,
         x: p.x,
         y: p.y,
@@ -185,7 +197,40 @@ export const useSessionStore = defineStore('session', {
       quadrat.boundary = ring.map((p) => ({ x: p.x, y: p.y }));
       quadrat.geoDefined = true;
       quadrat.rngSeed = seed;
+      quadrat.sampling = settings.sampling;
+      quadrat.shape = settings.shape;
+      // A polygon has no cells to take a corner of, so record what was
+      // actually used rather than an origin that had no effect.
+      quadrat.gridOrigin = ring.length === 4 ? settings.gridOrigin : 'center';
       quadrat.samples = samples;
+      this.dirty = true;
+    },
+
+    /** Change a sampling default. Existing quadrats keep what they used. */
+    setSampling(sampling: SamplingMode): void {
+      if (this.session === null) return;
+      this.session.settings.sampling = sampling;
+      this.dirty = true;
+    },
+
+    setShape(shape: QuadratShape): void {
+      if (this.session === null) return;
+      this.session.settings.shape = shape;
+      this.dirty = true;
+    },
+
+    setGridOrigin(gridOrigin: GridOrigin): void {
+      if (this.session === null) return;
+      this.session.settings.gridOrigin = gridOrigin;
+      this.dirty = true;
+    },
+
+    /** Grid dimensions. Values below 1 are ignored rather than clamped. */
+    setGridSize(rows: number, cols: number): void {
+      if (this.session === null) return;
+      if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || cols < 1) return;
+      this.session.settings.numOfSampleRows = rows;
+      this.session.settings.numOfSampleCols = cols;
       this.dirty = true;
     },
 

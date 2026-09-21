@@ -83,7 +83,13 @@ Other commands:
   extend it there rather than inside the component.
 - Sampling determinism: pass an explicit seed
   (`store.defineBoundary(ring, 42)`) and assert exact regeneration;
-  never assert on unseeded output.
+  never assert on unseeded output. `regular-grid` takes no randomness at
+  all, so its layout can be asserted as exact coordinates.
+- Drawing/geometry assertions belong in display-pixel space, not
+  normalized coordinates: the test canvas is 800×600, so equal
+  normalized deltas are NOT equal on screen. Angles, segment lengths
+  and squareness must be measured after scaling by the fitted size (see
+  `canvas-math.spec.ts`).
 
 ## Desktop diagnostics (env vars on `apps/desktop`)
 

@@ -9,32 +9,45 @@
  * Coordinates: session data is image-normalized (0–1); the SVG is sized to
  * the image fitted inside the panel, and zoom/pan is a translate/scale
  * transform on the inner group (see canvas.ts).
+ *
+ * Drawing depends on the session's `shape` setting:
+ * - `quad` completes on the fourth click,
+ * - `square` completes on the SECOND — that click fixes one side and the
+ *   square is built at a right angle to it,
+ * - `n-poly` completes when the user clicks back on the first node.
+ *
+ * Holding Ctrl snaps the segment being drawn to 15° steps and, from the
+ * third vertex of a quad or polygon, forces it to the previous segment's
+ * length. Both are measured in display pixels, never in normalized
+ * coordinates — see the note in canvas.ts.
  */
-import { GeometryError, Vec2, mulberry32, samplePolygon } from '@quadrator/core';
+import { GeometryError, Vec2 } from '@quadrator/core';
 import { select } from 'd3-selection';
 import { type D3ZoomEvent, type ZoomBehavior, zoom as d3zoom, zoomIdentity } from 'd3-zoom';
-import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue';
 import {
   IDENTITY,
+  OVERLAY,
+  constrainPoint,
+  crosshairArms,
   fitContain,
   imageSizerKey,
   naturalImageSize,
   nearFirstNode,
   overlayScale,
+  quadratGridLines,
   sampleColor,
+  squareRing,
   toNormalized,
 } from '../canvas.ts';
+import { Picker } from '../selection.ts';
 import { usePlatform } from '../platform.ts';
 import { useSessionStore } from '../stores/session.ts';
 import { useTaggingStore } from '../stores/tagging.ts';
 
-// Legacy overlay sizes in display px at zoom 1 (ImageViewer svgSizes).
-const NODE_RADIUS = 8;
-const SAMPLE_RADIUS = 8;
-const LINE_WIDTH = 2;
-const CIRCLE_STROKE_WIDTH = 1;
-const CROSSHAIR_LENGTH = 16;
-const CROSSHAIR_STROKE_WIDTH = 1;
+// Overlay palette and sizes (display px at zoom 1) live in canvas.ts so the
+// look is defined in one place; see the OVERLAY comment for why the marks
+// are cased rather than simply brighter.
 
 const platform = usePlatform();
 const session = useSessionStore();
@@ -43,6 +56,11 @@ const sizeImage = inject(imageSizerKey, naturalImageSize);
 
 const container = ref<HTMLDivElement | null>(null);
 const svgEl = ref<SVGSVGElement | null>(null);
+// Filter ids are document-global, so two mounted canvases would collide.
+const casingId = `quadrat-casing-${useId()}`;
+// Sample points are small targets; picking resolves overlapping hit areas by
+// distance so the nearest point wins, not whichever SVG painted last.
+const samplePicker = new Picker<number>(OVERLAY.SAMPLE_PICK_RADIUS);
 
 // happy-dom reports zero-sized elements; the default keeps math finite there
 // and is immediately replaced by the ResizeObserver in real browsers.
@@ -55,10 +73,15 @@ const drawError = ref<string | null>(null);
 const drawnNodes = ref<Vec2[]>([]);
 /** Pointer is close enough to the first node for the next click to close the polygon. */
 const nearStart = ref(false);
+/** Last pointer position (image-normalized, unconstrained); null when off-canvas. */
+const pointer = ref<Vec2 | null>(null);
+/** Ctrl is down, so the segment being drawn is angle- and length-locked. */
+const ctrlHeld = ref(false);
 const transform = ref(IDENTITY);
 
 const quadrat = computed(() => session.currentQuadrat);
 const geoDefined = computed(() => quadrat.value?.geoDefined === true);
+const shape = computed(() => session.session?.settings.shape ?? 'n-poly');
 const fitted = computed(() =>
   natural.width > 0
     ? fitContain(containerSize.width, containerSize.height, natural.width / natural.height)
@@ -76,35 +99,77 @@ const currentSample = computed(() => {
 });
 
 /**
- * Equal-area cut lines (legacy yellow overlay). Not persisted in v1, but the
- * sampling is seeded so they are reproducible from boundary + rngSeed; if
- * the recomputed points no longer match the stored samples (e.g. settings
- * changed after the boundary was defined), draw nothing rather than a
- * misleading partition.
+ * The partition the samples sit on (grid cells or equal-area cuts), drawn
+ * only when it provably matches the stored points — see quadratGridLines.
  */
-const cutLines = computed<readonly [Vec2, Vec2][]>(() => {
-  const q = quadrat.value;
-  const settings = session.session?.settings;
-  if (q === null || settings === undefined || !q.geoDefined || q.rngSeed === null) return [];
-  if (settings.restrictToQuad || q.boundary.length === 4) return [];
-  try {
-    const n = settings.numOfSampleRows * settings.numOfSampleCols;
-    const result = samplePolygon(q.boundary, n, mulberry32(q.rngSeed));
-    const matches =
-      result.points.length === q.samples.length &&
-      result.points.every((p, i) => p.x === q.samples[i]?.x && p.y === q.samples[i]?.y);
-    return matches ? result.cutLines : [];
-  } catch {
-    return [];
-  }
+const gridLines = computed<readonly [Vec2, Vec2][]>(() =>
+  quadratGridLines(quadrat.value, session.session?.settings)
+);
+
+/**
+ * Ctrl locks the segment's angle to 15° steps, and from the third vertex on
+ * also its length to the previous segment's. A square is fixed by two
+ * clicks, so it never has a previous segment to match.
+ */
+const constraints = computed(() => ({
+  snapAngle: ctrlHeld.value,
+  equalLength: ctrlHeld.value && shape.value !== 'square' && drawnNodes.value.length >= 2,
+}));
+
+/** Where the next vertex would land, with the active constraints applied. */
+const previewPoint = computed<Vec2 | null>(() => {
+  if (geoDefined.value || pointer.value === null || drawnNodes.value.length === 0) return null;
+  return constrainPoint(drawnNodes.value, pointer.value, fitted.value, constraints.value);
+});
+
+/**
+ * Rubber band from the last placed vertex to where the next one would go.
+ * In square mode it shows the finished square instead, since the second
+ * click commits the whole shape — the user should see it before clicking.
+ */
+const previewRing = computed<readonly Vec2[]>(() => {
+  const p = previewPoint.value;
+  const first = drawnNodes.value[0];
+  if (p === null || first === undefined) return [];
+  if (shape.value === 'square') return squareRing(first, p, fitted.value);
+  return [drawnNodes.value[drawnNodes.value.length - 1]!, p];
+});
+
+/** The square preview is a finished shape; the rubber band is an open line. */
+const previewClosed = computed(() => shape.value === 'square' && previewRing.value.length === 4);
+
+/**
+ * The current sample's crosshair: four tapered arms converging on the point
+ * (see crosshairArms). Each is a polygon, since stroke width cannot vary.
+ */
+const crosshair = computed(() => {
+  const s = currentSample.value;
+  if (s === null) return [];
+  const centre = { x: s.x! * fitted.value.width, y: s.y! * fitted.value.height };
+  return crosshairArms(centre, scale.value).map((arm) =>
+    arm.map((p) => `${p.x},${p.y}`).join(' ')
+  );
 });
 
 function toPoints(ring: readonly Vec2[]): string {
   return ring.map((p) => `${p.x * fitted.value.width},${p.y * fitted.value.height}`).join(' ');
 }
 
+/** Sample points as pick candidates; unplaced samples cannot be selected. */
+const sampleCandidates = computed(() =>
+  samples.value
+    .filter((s) => s.x !== null && s.y !== null)
+    .map((s) => ({ value: s.index, at: { x: s.x!, y: s.y! } }))
+);
+
+/** Pointer is within reach of a sample, so a click would select it. */
+const overSample = computed(() => {
+  if (!geoDefined.value || pointer.value === null) return false;
+  return samplePicker.hits(sampleCandidates.value, pointer.value, fitted.value, scale.value);
+});
+
 const cursorStyle = computed(() => {
-  if (geoDefined.value) return 'grab';
+  if (geoDefined.value) return overSample.value ? 'pointer' : 'grab';
   return nearStart.value ? 'crosshair' : 'default';
 });
 
@@ -158,10 +223,11 @@ function eventToNormalized(event: MouseEvent): Vec2 {
   );
 }
 
-function complete(): void {
-  const ring = drawnNodes.value.map((p) => ({ x: p.x, y: p.y }));
+function complete(nodes: readonly Vec2[]): void {
+  const ring = nodes.map((p) => ({ x: p.x, y: p.y }));
   drawnNodes.value = [];
   nearStart.value = false;
+  pointer.value = null;
   try {
     session.defineBoundary(ring);
   } catch (error) {
@@ -171,29 +237,79 @@ function complete(): void {
 }
 
 function onSvgClick(event: MouseEvent): void {
-  const settings = session.session?.settings;
-  if (quadrat.value === null || settings === undefined) return;
-  if (geoDefined.value || imageUrl.value === null || fitted.value.width === 0) return;
+  if (quadrat.value === null || session.session === null) return;
+  if (imageUrl.value === null || fitted.value.width === 0) return;
 
-  const p = eventToNormalized(event);
-  // Polygon mode closes on a click near the first node (legacy 0.025 rule);
-  // ≥3 nodes required so a stray double-click can't commit a degenerate ring.
-  if (!settings.restrictToQuad && drawnNodes.value.length >= 3 && nearFirstNode(drawnNodes.value, p)) {
-    complete();
+  // Once the boundary exists, a click selects the nearest sample point
+  // rather than drawing. d3-zoom suppresses the click that ends a pan, so
+  // panning never selects.
+  if (geoDefined.value) {
+    const hit = samplePicker.nearest(
+      sampleCandidates.value,
+      eventToNormalized(event),
+      fitted.value,
+      scale.value
+    );
+    if (hit !== null) tagging.selectSampleOnCanvas(hit.value);
     return;
   }
+
+  ctrlHeld.value = event.ctrlKey;
+  pointer.value = eventToNormalized(event);
+  const p = previewPoint.value ?? pointer.value;
+
+  // Polygon mode closes on a click near the first node (legacy 0.025 rule);
+  // ≥3 nodes required so a stray double-click can't commit a degenerate ring.
+  // The test runs on the CONSTRAINED point, so with Ctrl held the lock can
+  // put the close out of reach — release Ctrl to finish the ring.
+  if (shape.value === 'n-poly' && drawnNodes.value.length >= 3 && nearFirstNode(drawnNodes.value, p)) {
+    complete(drawnNodes.value);
+    return;
+  }
+
   drawError.value = null;
+
+  // A square is fully determined by its first side: the second click both
+  // places the vertex and commits the shape.
+  if (shape.value === 'square' && drawnNodes.value.length === 1) {
+    complete(squareRing(drawnNodes.value[0]!, p, fitted.value));
+    return;
+  }
+
   drawnNodes.value.push(p);
-  if (settings.restrictToQuad && drawnNodes.value.length === 4) complete();
+  if (shape.value === 'quad' && drawnNodes.value.length === 4) complete(drawnNodes.value);
 }
 
 function onSvgMouseMove(event: MouseEvent): void {
-  if (geoDefined.value || session.session?.settings.restrictToQuad !== false) {
+  pointer.value = eventToNormalized(event);
+  // Tracked past geoDefined too, so the cursor can report a pickable sample.
+  if (geoDefined.value) {
     nearStart.value = false;
     return;
   }
+  ctrlHeld.value = event.ctrlKey;
   nearStart.value =
-    drawnNodes.value.length >= 3 && nearFirstNode(drawnNodes.value, eventToNormalized(event));
+    shape.value === 'n-poly' &&
+    drawnNodes.value.length >= 3 &&
+    nearFirstNode(drawnNodes.value, previewPoint.value ?? pointer.value);
+}
+
+function onSvgMouseLeave(): void {
+  pointer.value = null;
+  nearStart.value = false;
+}
+
+/**
+ * Ctrl is read off each mouse event, but the preview also has to react when
+ * the key is pressed or released without the pointer moving. Window blur
+ * clears it: a Ctrl+Tab away would otherwise leave the lock stuck on.
+ */
+function onKeyChange(event: KeyboardEvent): void {
+  ctrlHeld.value = event.ctrlKey;
+}
+
+function onWindowBlur(): void {
+  ctrlHeld.value = false;
 }
 
 // ---- zoom / pan ---------------------------------------------------------------
@@ -212,6 +328,10 @@ onMounted(() => {
     });
   select(svg).call(zoomBehavior).on('dblclick.zoom', null);
 
+  window.addEventListener('keydown', onKeyChange);
+  window.addEventListener('keyup', onKeyChange);
+  window.addEventListener('blur', onWindowBlur);
+
   if (typeof ResizeObserver !== 'undefined' && container.value !== null) {
     resizeObserver = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
@@ -224,7 +344,12 @@ onMounted(() => {
   }
 });
 
-onBeforeUnmount(() => resizeObserver?.disconnect());
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  window.removeEventListener('keydown', onKeyChange);
+  window.removeEventListener('keyup', onKeyChange);
+  window.removeEventListener('blur', onWindowBlur);
+});
 
 function resetView(): void {
   transform.value = IDENTITY;
@@ -235,10 +360,13 @@ function resetView(): void {
 
 // Reset Nodes / quadrat switch: drop any in-progress drawing and re-center.
 watch(
-  () => [quadrat.value?.id, geoDefined.value],
+  () => [quadrat.value?.id, geoDefined.value, shape.value],
   () => {
+    // Switching shape mid-draw would mix rules (e.g. two square clicks left
+    // over in quad mode), so the in-progress ring is dropped.
     drawnNodes.value = [];
     nearStart.value = false;
+    pointer.value = null;
     drawError.value = null;
     resetView();
   }
@@ -279,7 +407,25 @@ watch(
       data-test="canvas-svg"
       @click="onSvgClick"
       @mousemove="onSvgMouseMove"
+      @mouseleave="onSvgMouseLeave"
+      @contextmenu.prevent
     >
+      <defs>
+        <!-- Zero-offset dark shadow = a casing around every overlay mark, so
+             thin lines and small dots separate from whatever is under them.
+             The blur is scaled with the overlay so it stays a hairline rather
+             than a smudge as the user zooms in. -->
+        <filter :id="casingId" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow
+            dx="0"
+            dy="0"
+            :stdDeviation="OVERLAY.CASING_BLUR * scale"
+            :flood-color="OVERLAY.CASING"
+            flood-opacity="1"
+          />
+        </filter>
+      </defs>
+
       <g :transform="`translate(${transform.x},${transform.y}) scale(${transform.k})`">
         <image
           v-if="imageUrl !== null"
@@ -289,79 +435,117 @@ watch(
           preserveAspectRatio="none"
         />
 
-        <line
-          v-for="(cut, i) in cutLines"
-          :key="`cut-${i}`"
-          :x1="cut[0].x * fitted.width"
-          :y1="cut[0].y * fitted.height"
-          :x2="cut[1].x * fitted.width"
-          :y2="cut[1].y * fitted.height"
-          stroke="yellow"
-          :stroke-width="LINE_WIDTH * scale"
-          data-test="cut-line"
-        />
+        <!-- everything below is cased; the image above must stay untouched -->
+        <g :filter="`url(#${casingId})`">
+          <line
+            v-for="(cut, i) in gridLines"
+            :key="`cut-${i}`"
+            :x1="cut[0].x * fitted.width"
+            :y1="cut[0].y * fitted.height"
+            :x2="cut[1].x * fitted.width"
+            :y2="cut[1].y * fitted.height"
+            :stroke="OVERLAY.GRID"
+            :stroke-opacity="OVERLAY.GRID_OPACITY"
+            :stroke-width="OVERLAY.GRID_WIDTH * scale"
+            data-test="cut-line"
+          />
 
-        <!-- boundary: closed polygon once defined, open polyline while drawing -->
-        <polygon
-          v-if="geoDefined && nodes.length > 0"
-          :points="toPoints(nodes)"
-          fill="none"
-          stroke="red"
-          :stroke-width="LINE_WIDTH * scale"
-          data-test="boundary-polygon"
-        />
-        <polyline
-          v-else-if="nodes.length > 1"
-          :points="toPoints(nodes)"
-          fill="none"
-          stroke="red"
-          :stroke-width="LINE_WIDTH * scale"
-          data-test="boundary-polyline"
-        />
-        <circle
-          v-for="(node, i) in nodes"
-          :key="`node-${i}`"
-          :cx="node.x * fitted.width"
-          :cy="node.y * fitted.height"
-          :r="NODE_RADIUS * scale"
-          fill="red"
-          :stroke-width="CIRCLE_STROKE_WIDTH * scale"
-          data-test="node-circle"
-        />
-
-        <template v-for="sample in samples" :key="sample.index">
+          <!-- boundary: closed polygon once defined, open polyline while drawing -->
+          <polygon
+            v-if="geoDefined && nodes.length > 0"
+            :points="toPoints(nodes)"
+            fill="none"
+            :stroke="OVERLAY.BOUNDARY"
+            :stroke-width="OVERLAY.BOUNDARY_WIDTH * scale"
+            stroke-linejoin="round"
+            data-test="boundary-polygon"
+          />
+          <polyline
+            v-else-if="nodes.length > 1"
+            :points="toPoints(nodes)"
+            fill="none"
+            :stroke="OVERLAY.BOUNDARY"
+            :stroke-width="OVERLAY.BOUNDARY_WIDTH * scale"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+            data-test="boundary-polyline"
+          />
+          <!-- where the next vertex would land: the rubber band, or in square
+               mode the whole square the next click commits -->
+          <polygon
+            v-if="previewClosed"
+            :points="toPoints(previewRing)"
+            fill="none"
+            :stroke="OVERLAY.BOUNDARY"
+            :stroke-dasharray="`${6 * scale} ${4 * scale}`"
+            :stroke-width="OVERLAY.BOUNDARY_WIDTH * scale"
+            :stroke-opacity="0.85"
+            data-test="preview-ring"
+          />
+          <polyline
+            v-else-if="previewRing.length > 1"
+            :points="toPoints(previewRing)"
+            fill="none"
+            :stroke="OVERLAY.BOUNDARY"
+            :stroke-dasharray="`${6 * scale} ${4 * scale}`"
+            :stroke-width="OVERLAY.BOUNDARY_WIDTH * scale"
+            :stroke-opacity="0.85"
+            data-test="preview-ring"
+          />
           <circle
-            v-if="sample.x !== null && sample.y !== null"
-            :cx="sample.x * fitted.width"
-            :cy="sample.y * fitted.height"
-            :r="SAMPLE_RADIUS * scale"
-            v-bind="sampleColor(sample, sample.index === tagging.cursor)"
-            :stroke-width="CIRCLE_STROKE_WIDTH * scale"
-            pointer-events="all"
-            class="sample-circle"
-            :data-test="`sample-${sample.index}`"
-            @click.stop="tagging.selectSampleOnCanvas(sample.index)"
+            v-if="previewPoint !== null"
+            :cx="previewPoint.x * fitted.width"
+            :cy="previewPoint.y * fitted.height"
+            :r="OVERLAY.NODE_RADIUS * scale"
+            fill="none"
+            :stroke="OVERLAY.BOUNDARY"
+            :stroke-width="OVERLAY.NODE_STROKE_WIDTH * scale"
+            :stroke-opacity="0.85"
+            data-test="preview-node"
           />
-        </template>
 
-        <!-- the current sample renders as a yellow crosshair instead of a circle -->
-        <g v-if="currentSample !== null" data-test="crosshair">
-          <line
-            :x1="currentSample.x! * fitted.width - CROSSHAIR_LENGTH * scale"
-            :y1="currentSample.y! * fitted.height"
-            :x2="currentSample.x! * fitted.width + CROSSHAIR_LENGTH * scale"
-            :y2="currentSample.y! * fitted.height"
-            stroke="yellow"
-            :stroke-width="CROSSHAIR_STROKE_WIDTH * scale"
+          <!-- Vertex handles while drawing only: once the boundary is set
+               they sit on top of the corner samples and obscure the very
+               substrate being scored. The polygon still shows the shape. -->
+          <circle
+            v-for="(node, i) in geoDefined ? [] : nodes"
+            :key="`node-${i}`"
+            :cx="node.x * fitted.width"
+            :cy="node.y * fitted.height"
+            :r="OVERLAY.NODE_RADIUS * scale"
+            :fill="OVERLAY.BOUNDARY"
+            :stroke="OVERLAY.NODE_RIM"
+            :stroke-width="OVERLAY.NODE_STROKE_WIDTH * scale"
+            paint-order="stroke"
+            data-test="node-circle"
           />
-          <line
-            :x1="currentSample.x! * fitted.width"
-            :y1="currentSample.y! * fitted.height - CROSSHAIR_LENGTH * scale"
-            :x2="currentSample.x! * fitted.width"
-            :y2="currentSample.y! * fitted.height + CROSSHAIR_LENGTH * scale"
-            stroke="yellow"
-            :stroke-width="CROSSHAIR_STROKE_WIDTH * scale"
-          />
+
+          <template v-for="sample in samples" :key="sample.index">
+            <circle
+              v-if="sample.x !== null && sample.y !== null"
+              :cx="sample.x * fitted.width"
+              :cy="sample.y * fitted.height"
+              :r="OVERLAY.SAMPLE_RADIUS * scale"
+              v-bind="sampleColor(sample, sample.index === tagging.cursor)"
+              :stroke-width="OVERLAY.SAMPLE_STROKE_WIDTH * scale"
+              paint-order="stroke"
+              pointer-events="none"
+              :data-test="`sample-${sample.index}`"
+            />
+          </template>
+
+          <!-- the current sample: four tapered arms and no circle, so the
+               substrate being scored stays visible under the point -->
+          <g v-if="currentSample !== null" data-test="crosshair">
+            <polygon
+              v-for="(arm, i) in crosshair"
+              :key="`crosshair-${i}`"
+              :points="arm"
+              :fill="OVERLAY.CROSSHAIR"
+              stroke="none"
+              data-test="crosshair-arm"
+            />
+          </g>
         </g>
       </g>
     </svg>
@@ -382,10 +566,6 @@ watch(
 .canvas-container svg {
   overflow: visible;
   flex: none;
-}
-
-.sample-circle {
-  cursor: pointer;
 }
 
 .draw-error {

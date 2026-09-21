@@ -30,16 +30,41 @@ export {
   isPointInside,
   isSimple,
   bbox,
+  centroid,
+  interiorPoint,
   splitByArea,
 } from './geometry/polygon.ts';
 
 // sampling
 export { type Rng, mulberry32, randomSeed } from './sampling/rng.ts';
 export { sampleRect } from './sampling/rect.ts';
-export { type PolySampleResult, samplePolygon } from './sampling/poly.ts';
+export {
+  type PolySampleResult,
+  type PolySplitResult,
+  samplePolygon,
+  samplePolygonCentres,
+  splitEqualArea,
+} from './sampling/poly.ts';
+export {
+  type GridOrigin,
+  GRID_ORIGINS,
+  gridCellCounts,
+  rectGridLines,
+  sampleRectGrid,
+} from './sampling/grid.ts';
+export { type SamplePlan, type SamplePlanSettings, planSamples } from './sampling/plan.ts';
+export { sampleUniform } from './sampling/uniform.ts';
 
 // model
-export type { Sample, SpeciesEntry, QuadratSettings } from './model/types.ts';
+export {
+  type Sample,
+  type SpeciesEntry,
+  type QuadratSettings,
+  type SamplingMode,
+  type QuadratShape,
+  QUADRAT_SHAPES,
+  SAMPLING_MODES,
+} from './model/types.ts';
 
 // export + species
 export { CSV_HEADER, type QuadratCsvInput, csvEscape, quadratCsvRows } from './export/csv.ts';
@@ -67,4 +92,14 @@ export {
   settingsV1Schema,
   sessionV1Schema,
 } from './serialization/v1.ts';
-export { migrateV0, parseSession, serializeSession } from './serialization/migrate.ts';
+export {
+  type SampleV2,
+  type QuadratV2,
+  type SettingsV2,
+  type SessionV2,
+  sampleV2Schema,
+  quadratV2Schema,
+  settingsV2Schema,
+  sessionV2Schema,
+} from './serialization/v2.ts';
+export { migrateV0, migrateV1, parseSession, serializeSession } from './serialization/migrate.ts';

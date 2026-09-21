@@ -1,11 +1,11 @@
-import { GeometryError, InMemoryPlatformAdapter, QuadratV1, serializeSession } from '@quadrator/core';
+import { GeometryError, InMemoryPlatformAdapter, QuadratV2, serializeSession } from '@quadrator/core';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { emptySession, useSessionStore } from '../src/stores/session.ts';
 
 const NOW = new Date('2026-07-07T12:00:00.000Z');
 
-function blankQuadrat(id: string): QuadratV1 {
+function blankQuadrat(id: string): QuadratV2 {
   return {
     id,
     imagePath: `/img/${id}.jpg`,
@@ -13,6 +13,9 @@ function blankQuadrat(id: string): QuadratV1 {
     boundary: [],
     geoDefined: false,
     rngSeed: null,
+    sampling: 'stratified-random',
+    shape: 'n-poly',
+    gridOrigin: 'center',
     samples: [],
   };
 }
@@ -31,6 +34,9 @@ function sessionJson(): string {
     ],
     geoDefined: true,
     rngSeed: 42,
+    sampling: 'stratified-random',
+    shape: 'quad',
+    gridOrigin: 'center',
     samples: [{ index: 0, x: 10, y: 12, codes: ['Ulva'] }],
   });
   s.currentQuadratId = 'q1';
@@ -51,7 +57,9 @@ describe('session store', () => {
     expect(store.session?.settings).toEqual({
       numOfSampleRows: 5,
       numOfSampleCols: 5,
-      restrictToQuad: false,
+      sampling: 'stratified-random',
+      shape: 'n-poly',
+      gridOrigin: 'center',
     });
     expect(store.fileRef).toBeNull();
   });
@@ -273,5 +281,201 @@ describe('session store', () => {
     await store.save(platform, NOW);
 
     expect(platform.savedSessions[0]?.text).toBe(sessionJson());
+  });
+});
+
+describe('sampling settings', () => {
+  const RING = [
+    { x: 0.1, y: 0.1 },
+    { x: 0.9, y: 0.1 },
+    { x: 0.9, y: 0.9 },
+    { x: 0.1, y: 0.9 },
+  ];
+  const POLY = [
+    { x: 0.5, y: 0.05 },
+    { x: 0.95, y: 0.4 },
+    { x: 0.78, y: 0.95 },
+    { x: 0.22, y: 0.95 },
+    { x: 0.05, y: 0.4 },
+  ];
+
+  function storeWithQuadrat() {
+    const store = useSessionStore();
+    store.newSession(NOW);
+    store.session!.quadrats.push(blankQuadrat('q1'));
+    store.session!.currentQuadratId = 'q1';
+    store.setGridSize(2, 2);
+    return store;
+  }
+
+  it('setters change the session defaults and mark the session dirty', () => {
+    const store = storeWithQuadrat();
+    store.dirty = false;
+
+    store.setSampling('regular-grid');
+    store.setShape('square');
+    store.setGridOrigin('bottom-left');
+    store.setGridSize(3, 4);
+
+    expect(store.session!.settings).toEqual({
+      numOfSampleRows: 3,
+      numOfSampleCols: 4,
+      sampling: 'regular-grid',
+      shape: 'square',
+      gridOrigin: 'bottom-left',
+    });
+    expect(store.dirty).toBe(true);
+  });
+
+  it('setGridSize refuses values that are not positive integers', () => {
+    const store = storeWithQuadrat();
+    store.setGridSize(0, 5);
+    store.setGridSize(5, -1);
+    store.setGridSize(2.5, 5);
+    expect(store.session!.settings.numOfSampleRows).toBe(2);
+    expect(store.session!.settings.numOfSampleCols).toBe(2);
+  });
+
+  it('regular-grid on a quad places points at the chosen cell corner', () => {
+    const store = storeWithQuadrat();
+    store.setSampling('regular-grid');
+    store.setGridOrigin('top-left');
+    store.defineBoundary(RING, 1);
+
+    // 2×2 over x,y 0.1–0.9: top-left corners are the cell origins
+    expect(store.currentQuadrat!.samples.map((s) => ({ x: s.x, y: s.y }))).toEqual([
+      { x: 0.1, y: 0.1 },
+      { x: 0.5, y: 0.1 },
+      { x: 0.1, y: 0.5 },
+      { x: 0.5, y: 0.5 },
+    ]);
+  });
+
+  it("the 'fill' origin samples the quadrat corners and keeps the point count", () => {
+    const store = storeWithQuadrat();
+    store.setGridSize(3, 3);
+    store.setSampling('regular-grid');
+    store.setGridOrigin('fill');
+    store.defineBoundary(RING, 1);
+
+    const points = store.currentQuadrat!.samples.map((s) => ({ x: s.x, y: s.y }));
+    expect(points).toHaveLength(9);
+    // RING spans 0.1–0.9 on both axes, so fill hits its corners and mid-edges
+    expect(points).toEqual([
+      { x: 0.1, y: 0.1 },
+      { x: 0.5, y: 0.1 },
+      { x: 0.9, y: 0.1 },
+      { x: 0.1, y: 0.5 },
+      { x: 0.5, y: 0.5 },
+      { x: 0.9, y: 0.5 },
+      { x: 0.1, y: 0.9 },
+      { x: 0.5, y: 0.9 },
+      { x: 0.9, y: 0.9 },
+    ]);
+    expect(store.currentQuadrat!.gridOrigin).toBe('fill');
+  });
+
+  it('regular-grid needs no seed: different seeds give the same layout', () => {
+    const store = storeWithQuadrat();
+    store.setSampling('regular-grid');
+
+    store.defineBoundary(RING, 1);
+    const first = store.currentQuadrat!.samples.map((s) => ({ x: s.x, y: s.y }));
+    store.defineBoundary(RING, 99999);
+    expect(store.currentQuadrat!.samples.map((s) => ({ x: s.x, y: s.y }))).toEqual(first);
+  });
+
+  it('regular-grid on a polygon uses piece centres and ignores the corner origin', () => {
+    const store = storeWithQuadrat();
+    store.setSampling('regular-grid');
+    store.setGridOrigin('bottom-right');
+    store.defineBoundary(POLY, 1);
+    const withCorner = store.currentQuadrat!.samples.map((s) => ({ x: s.x, y: s.y }));
+
+    store.setGridOrigin('center');
+    store.defineBoundary(POLY, 1);
+    expect(store.currentQuadrat!.samples.map((s) => ({ x: s.x, y: s.y }))).toEqual(withCorner);
+  });
+
+  it('random sampling is seeded, and unlike stratified does not fill every cell', () => {
+    const store = storeWithQuadrat();
+    store.setGridSize(5, 5);
+    store.setSampling('random');
+    store.defineBoundary(RING, 3);
+    const points = store.currentQuadrat!.samples.map((s) => ({ x: s.x!, y: s.y! }));
+    expect(points).toHaveLength(25);
+
+    store.defineBoundary(RING, 3);
+    expect(store.currentQuadrat!.samples.map((s) => ({ x: s.x!, y: s.y! }))).toEqual(points);
+
+    const cells = new Set(
+      points.map((p) => `${Math.floor((p.x - 0.1) * 5 / 0.8)},${Math.floor((p.y - 0.1) * 5 / 0.8)}`)
+    );
+    expect(cells.size).toBeLessThan(25);
+  });
+
+  it('records the mode each quadrat was actually defined with', () => {
+    const store = useSessionStore();
+    store.newSession(NOW);
+    store.session!.quadrats.push(blankQuadrat('q1'), blankQuadrat('q2'));
+    store.setGridSize(2, 2);
+
+    store.session!.currentQuadratId = 'q1';
+    store.setSampling('regular-grid');
+    store.setShape('square');
+    store.setGridOrigin('top-right');
+    store.defineBoundary(RING, 1);
+
+    store.session!.currentQuadratId = 'q2';
+    store.setSampling('random');
+    store.setShape('n-poly');
+    store.defineBoundary(POLY, 2);
+
+    const [q1, q2] = store.session!.quadrats;
+    expect(q1).toMatchObject({
+      sampling: 'regular-grid',
+      shape: 'square',
+      gridOrigin: 'top-right',
+    });
+    expect(q2).toMatchObject({ sampling: 'random', shape: 'n-poly' });
+  });
+
+  it('a later settings change never rewrites a quadrat that is already defined', () => {
+    const store = storeWithQuadrat();
+    store.defineBoundary(RING, 1);
+    const before = store.currentQuadrat!.samples.map((s) => ({ x: s.x, y: s.y }));
+
+    store.setSampling('random');
+    store.setShape('square');
+    store.setGridSize(9, 9);
+
+    expect(store.currentQuadrat!.sampling).toBe('stratified-random');
+    expect(store.currentQuadrat!.samples.map((s) => ({ x: s.x, y: s.y }))).toEqual(before);
+  });
+
+  it('records a center origin for polygons, which have no cell corners', () => {
+    const store = storeWithQuadrat();
+    store.setSampling('regular-grid');
+    store.setGridOrigin('bottom-left');
+    store.defineBoundary(POLY, 1);
+    expect(store.currentQuadrat!.gridOrigin).toBe('center');
+  });
+
+  it('a newly added quadrat starts on the current defaults', async () => {
+    const store = storeWithQuadrat();
+    store.setSampling('regular-grid');
+    store.setShape('square');
+    store.setGridOrigin('bottom-left');
+
+    const platform = new InMemoryPlatformAdapter();
+    platform.queueImagePick([{ id: '/img/new.jpg', name: 'new.jpg' }]);
+    const [added] = await store.addImages(platform, NOW);
+
+    expect(added).toMatchObject({
+      sampling: 'regular-grid',
+      shape: 'square',
+      gridOrigin: 'bottom-left',
+      geoDefined: false,
+    });
   });
 });

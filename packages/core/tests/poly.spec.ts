@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GeometryError, area, isPointInside } from '../src/geometry/polygon.ts';
-import { samplePolygon } from '../src/sampling/poly.ts';
+import { samplePolygon, samplePolygonCentres, splitEqualArea } from '../src/sampling/poly.ts';
 import { mulberry32 } from '../src/sampling/rng.ts';
 import { bowtie, clickedSquare, expectClose, lShape, pentagon, unitSquare } from './helpers.ts';
 
@@ -86,5 +86,89 @@ describe('samplePolygon', () => {
     const stuckRng = () => 0.99;
     expect(() => samplePolygon(triangle, 1, stuckRng)).toThrow(GeometryError);
     expect(() => samplePolygon(triangle, 1, stuckRng)).toThrow(/tries/);
+  });
+});
+
+describe('samplePolygonCentres', () => {
+  const cases = [
+    ['unit square', unitSquare],
+    ['click-defined quadrat', clickedSquare],
+    ['pentagon', pentagon],
+    ['concave L-shape', lShape],
+  ] as const;
+
+  it.each(cases)('%s: one point per piece, each inside its own piece', (_name, ring) => {
+    const { points, pieces } = samplePolygonCentres(ring, 9);
+    expect(points).toHaveLength(9);
+    expect(pieces).toHaveLength(9);
+    points.forEach((p, i) => {
+      expect(isPointInside(pieces[i]!, p)).toBe(true);
+    });
+  });
+
+  it('needs no seed and never varies', () => {
+    const a = samplePolygonCentres(pentagon, 12);
+    const b = samplePolygonCentres(pentagon, 12);
+    expect(a.points).toEqual(b.points);
+  });
+
+  it('places points more evenly than the random mode does', () => {
+    // Centres sit at the middle of each equal-area piece, so consecutive
+    // points are spaced regularly; random placement within the same pieces
+    // scatters. Compare the spread of nearest-neighbour distances.
+    const spread = (pts: { x: number; y: number }[]) => {
+      const d = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i]!.x, p.y - pts[i]!.y));
+      const mean = d.reduce((n, v) => n + v, 0) / d.length;
+      return Math.sqrt(d.reduce((n, v) => n + (v - mean) ** 2, 0) / d.length);
+    };
+    const centres = samplePolygonCentres(unitSquare, 16).points;
+    const random = samplePolygon(unitSquare, 16, mulberry32(4)).points;
+    expect(spread(centres)).toBeLessThan(spread(random));
+  });
+
+  it('shares the partition with samplePolygon, so the drawn cuts match', () => {
+    const centres = samplePolygonCentres(pentagon, 7);
+    const random = samplePolygon(pentagon, 7, mulberry32(1));
+    expect(centres.cutLines).toEqual(random.cutLines);
+    expect(centres.pieces).toEqual(random.pieces);
+  });
+
+  it('n = 1 puts a single point inside the whole quadrat, with no cuts', () => {
+    const { points, cutLines } = samplePolygonCentres(pentagon, 1);
+    expect(cutLines).toEqual([]);
+    expect(isPointInside(pentagon, points[0]!)).toBe(true);
+  });
+
+  it('rejects degenerate rings and bad counts', () => {
+    expect(() => samplePolygonCentres(pentagon, 0)).toThrow(GeometryError);
+    expect(() => samplePolygonCentres(pentagon, 2.5)).toThrow(GeometryError);
+    expect(() =>
+      samplePolygonCentres(
+        [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+          { x: 2, y: 2 },
+        ],
+        1
+      )
+    ).toThrow(GeometryError);
+  });
+});
+
+describe('splitEqualArea', () => {
+  it('produces n pieces and n-1 cuts whose areas sum to the whole', () => {
+    const { pieces, cutLines } = splitEqualArea(pentagon, 5);
+    expect(pieces).toHaveLength(5);
+    expect(cutLines).toHaveLength(4);
+    const total = pieces.reduce((n, piece) => n + area(piece), 0);
+    expectClose(total, area(pentagon), 1e-6);
+  });
+
+  it('pieces are equal-area within tolerance', () => {
+    const { pieces } = splitEqualArea(clickedSquare, 4);
+    const target = area(clickedSquare) / 4;
+    for (const piece of pieces) {
+      expectClose(area(piece), target, 1e-6);
+    }
   });
 });

@@ -19,8 +19,10 @@ import {
 import { midpoint } from '../src/geometry/vec2.ts';
 import { samplePolygon } from '../src/sampling/poly.ts';
 import { mulberry32 } from '../src/sampling/rng.ts';
+import { GRID_ORIGINS } from '../src/sampling/grid.ts';
+import { QUADRAT_SHAPES, SAMPLING_MODES } from '../src/model/types.ts';
 import { parseSession, serializeSession } from '../src/serialization/migrate.ts';
-import { SessionV1 } from '../src/serialization/v1.ts';
+import { SessionV2 } from '../src/serialization/v2.ts';
 import { expectClose } from './helpers.ts';
 
 // ---------------------------------------------------------------- geometry
@@ -138,6 +140,10 @@ const arbSample = fc.record({
   codes: fc.array(fc.string(), { maxLength: 5 }),
 });
 
+const arbSampling = fc.constantFrom(...SAMPLING_MODES);
+const arbShape = fc.constantFrom(...QUADRAT_SHAPES);
+const arbGridOrigin = fc.constantFrom(...GRID_ORIGINS);
+
 const arbQuadrat = fc.record({
   id: fc.string({ minLength: 1 }),
   imagePath: fc.string(),
@@ -145,25 +151,30 @@ const arbQuadrat = fc.record({
   boundary: fc.array(fc.record({ x: arbCoord, y: arbCoord }), { maxLength: 8 }),
   geoDefined: fc.boolean(),
   rngSeed: fc.option(fc.integer({ min: 0, max: 0xffffffff }), { nil: null }),
+  sampling: arbSampling,
+  shape: arbShape,
+  gridOrigin: arbGridOrigin,
   samples: fc.array(arbSample, { maxLength: 6 }),
 });
 
-const arbSession: fc.Arbitrary<SessionV1> = fc.record({
-  schemaVersion: fc.constant(1 as const),
+const arbSession: fc.Arbitrary<SessionV2> = fc.record({
+  schemaVersion: fc.constant(2 as const),
   savedAt: fc
     .date({ min: new Date('1990-01-01'), max: new Date('2100-01-01'), noInvalidDate: true })
     .map((d) => d.toISOString()),
   settings: fc.record({
     numOfSampleRows: fc.integer({ min: 1, max: 1000 }),
     numOfSampleCols: fc.integer({ min: 1, max: 1000 }),
-    restrictToQuad: fc.boolean(),
+    sampling: arbSampling,
+    shape: arbShape,
+    gridOrigin: arbGridOrigin,
   }),
   quadrats: fc.array(arbQuadrat, { maxLength: 5 }),
   currentQuadratId: fc.option(fc.string({ minLength: 1 }), { nil: null }),
 });
 
 describe('session serialization properties', () => {
-  it('parse ∘ serialize = identity for any valid v1 session', () => {
+  it('parse ∘ serialize = identity for any valid v2 session', () => {
     fc.assert(
       fc.property(arbSession, (session) => {
         expect(parseSession(serializeSession(session))).toEqual(session);

@@ -30,7 +30,7 @@ test('save session → reload → load from file → relink image → data intac
   );
   expect(name).toMatch(/\.json$/);
   const saved = JSON.parse(text) as { schemaVersion: number };
-  expect(saved.schemaVersion).toBe(1);
+  expect(saved.schemaVersion).toBe(2);
   const sessionFile = testInfo.outputPath('saved-session.json');
   await writeFile(sessionFile, text, 'utf8');
 

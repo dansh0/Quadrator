@@ -1,7 +1,20 @@
 /**
- * Session parsing with automatic v0 → v1 migration.
+ * Session parsing with automatic v0 → v1 → v2 migration. Every older format
+ * is upgraded through the chain, so each hop stays small and independently
+ * tested; `parseSession` always returns the current version.
  *
- * Migration rules (Phase1CoreExtraction.md §7):
+ * v1 → v2 rules:
+ * - `restrictToQuad` becomes an explicit `shape`: true → 'quad', false →
+ *   'n-poly' (what the v1 app actually did with the flag clear);
+ * - sampling was always stratified-random in v1, so that is what every
+ *   migrated session and quadrat records; `gridOrigin` gets the 'center'
+ *   default and is inert until a regular-grid boundary is drawn;
+ * - a quadrat's own `shape` is recovered from its boundary — a 4-vertex ring
+ *   was drawn as a quad, anything else as an n-poly. `square` never existed
+ *   in v1, so no migrated quadrat claims it. Quadrats with no boundary yet
+ *   inherit the session default.
+ *
+ * v0 → v1 rules (Phase1CoreExtraction.md §7):
  * - settings: v0 never stored rows/cols (audit B8); best-effort from the
  *   first quadrat's numOfSamples — 25 → 5×5 (the app default), otherwise
  *   n×1. restrictToQuad defaults to false (the app default).
@@ -20,6 +33,7 @@
 import { z } from 'zod';
 import { SessionV0, sessionV0Schema } from './v0.ts';
 import { QuadratV1, SessionV1, sessionV1Schema } from './v1.ts';
+import { QuadratV2, SessionV2, sessionV2Schema } from './v2.ts';
 
 const CLOSED_RING_EPS = 1e-12;
 
@@ -84,18 +98,64 @@ export function migrateV0(v0: SessionV0, now: Date = new Date()): SessionV1 {
 }
 
 /**
- * Parse session JSON of any supported version into a validated SessionV1.
- * v0 files (no schemaVersion key) are migrated automatically. Throws
- * SyntaxError for invalid JSON, ZodError for shape violations, and never
- * returns a partially-applied session.
+ * Upgrade a validated v1 session to v2. Pure and total: v1 cannot express
+ * anything v2 lacks, so nothing is dropped and nothing can fail.
  */
-export function parseSession(json: string): SessionV1 {
+export function migrateV1(v1: SessionV1): SessionV2 {
+  const shape = v1.settings.restrictToQuad ? 'quad' : 'n-poly';
+
+  const quadrats: QuadratV2[] = v1.quadrats.map((q) => ({
+    id: q.id,
+    imagePath: q.imagePath,
+    name: q.name,
+    boundary: q.boundary.map((v) => ({ x: v.x, y: v.y })),
+    geoDefined: q.geoDefined,
+    rngSeed: q.rngSeed,
+    // v1 had exactly one sampling mode; the shape is readable off the ring.
+    sampling: 'stratified-random',
+    shape: q.boundary.length === 4 ? 'quad' : q.boundary.length === 0 ? shape : 'n-poly',
+    gridOrigin: 'center',
+    samples: q.samples.map((smp) => ({
+      index: smp.index,
+      x: smp.x,
+      y: smp.y,
+      codes: [...smp.codes],
+    })),
+  }));
+
+  // Validate the migration's own output so a bug here can never emit an
+  // invalid v2 session.
+  return sessionV2Schema.parse({
+    schemaVersion: 2,
+    savedAt: v1.savedAt,
+    settings: {
+      numOfSampleRows: v1.settings.numOfSampleRows,
+      numOfSampleCols: v1.settings.numOfSampleCols,
+      sampling: 'stratified-random',
+      shape,
+      gridOrigin: 'center',
+    },
+    quadrats,
+    currentQuadratId: v1.currentQuadratId,
+  });
+}
+
+/**
+ * Parse session JSON of any supported version into a validated SessionV2.
+ * Older files are migrated automatically (v0 files have no schemaVersion
+ * key at all). Throws SyntaxError for invalid JSON, ZodError for shape
+ * violations, and never returns a partially-applied session.
+ */
+export function parseSession(json: string): SessionV2 {
   const data: unknown = JSON.parse(json);
 
   if (typeof data === 'object' && data !== null && 'schemaVersion' in data) {
     const version = (data as { schemaVersion: unknown }).schemaVersion;
+    if (version === 2) {
+      return sessionV2Schema.parse(data);
+    }
     if (version === 1) {
-      return sessionV1Schema.parse(data);
+      return migrateV1(sessionV1Schema.parse(data));
     }
     throw new z.ZodError([
       {
@@ -106,18 +166,20 @@ export function parseSession(json: string): SessionV1 {
     ]);
   }
 
-  return migrateV0(sessionV0Schema.parse(data));
+  return migrateV1(migrateV0(sessionV0Schema.parse(data)));
 }
 
 /** Serialize with stable key order and 2-space indent (diff-friendly saves). */
-export function serializeSession(s: SessionV1): string {
+export function serializeSession(s: SessionV2): string {
   const ordered = {
     schemaVersion: s.schemaVersion,
     savedAt: s.savedAt,
     settings: {
       numOfSampleRows: s.settings.numOfSampleRows,
       numOfSampleCols: s.settings.numOfSampleCols,
-      restrictToQuad: s.settings.restrictToQuad,
+      sampling: s.settings.sampling,
+      shape: s.settings.shape,
+      gridOrigin: s.settings.gridOrigin,
     },
     quadrats: s.quadrats.map((q) => ({
       id: q.id,
@@ -126,6 +188,9 @@ export function serializeSession(s: SessionV1): string {
       boundary: q.boundary.map((v) => ({ x: v.x, y: v.y })),
       geoDefined: q.geoDefined,
       rngSeed: q.rngSeed,
+      sampling: q.sampling,
+      shape: q.shape,
+      gridOrigin: q.gridOrigin,
       samples: q.samples.map((smp) => ({
         index: smp.index,
         x: smp.x,

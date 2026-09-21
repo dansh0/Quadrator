@@ -1,4 +1,4 @@
-import { InMemoryPlatformAdapter, QuadratV1, SessionV1 } from '@quadrator/core';
+import { InMemoryPlatformAdapter, QuadratV2, SessionV2 } from '@quadrator/core';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import type { Component } from 'vue';
@@ -23,7 +23,7 @@ export function mountWithShell(
 }
 
 /** A quadrat with a defined boundary and n blank tagged samples. */
-export function taggedQuadrat(id: string, nSamples: number): QuadratV1 {
+export function taggedQuadrat(id: string, nSamples: number): QuadratV2 {
   return {
     id,
     imagePath: `/img/${id}.jpg`,
@@ -36,6 +36,9 @@ export function taggedQuadrat(id: string, nSamples: number): QuadratV1 {
     ],
     geoDefined: true,
     rngSeed: 1,
+    sampling: 'stratified-random',
+    shape: 'quad',
+    gridOrigin: 'center',
     samples: Array.from({ length: nSamples }, (_, index) => ({
       index,
       x: 10 + index,
@@ -46,7 +49,7 @@ export function taggedQuadrat(id: string, nSamples: number): QuadratV1 {
 }
 
 /** Install a session with the given quadrats into the active session store. */
-export function seedSession(quadrats: QuadratV1[], currentId = quadrats[0]?.id ?? null): SessionV1 {
+export function seedSession(quadrats: QuadratV2[], currentId = quadrats[0]?.id ?? null): SessionV2 {
   const store = useSessionStore();
   store.newSession(new Date('2026-07-07T12:00:00.000Z'));
   store.session!.quadrats.push(...quadrats);

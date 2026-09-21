@@ -74,11 +74,22 @@ clears it.
   image path, name, open-ring boundary, `geoDefined`, `rngSeed`,
   positional `samples[]` with nullable coordinates and species codes),
   `currentQuadratId`.
+- **v2** (current) — adds the sampling controls. `settings` drops the
+  dead `restrictToQuad` flag for an explicit `shape`
+  (`quad`/`square`/`n-poly`), plus `sampling`
+  (`stratified-random`/`regular-grid`/`random`) and `gridOrigin`
+  (cell centre, one of the four corners, or `fill`). Each **quadrat** also
+  carries the `sampling`, `shape` and `gridOrigin` it was generated
+  with: session settings are only the default for the next boundary, so
+  without per-quadrat provenance a layout could not be reproduced once
+  the user changed modes, and the canvas could draw a partition the
+  points do not belong to. `shape` cannot be derived from the ring —
+  `quad` and `square` both produce four vertices.
 - Rules: unknown versions are rejected with a typed error, never
-  guessed at. Every format ever shipped remains loadable via migration,
-  proven by real fixture files. Migration prefers preserving data over
-  spec strictness (e.g. a boundary present without a `geoDefined` flag
-  implies the flag).
+  guessed at. Every format ever shipped remains loadable via migration
+  (v0 → v1 → v2, each hop separately tested), proven by real fixture
+  files. Migration prefers preserving data over spec strictness (e.g. a
+  boundary present without a `geoDefined` flag implies the flag).
 
 ### CSV export contract
 
@@ -96,6 +107,123 @@ conceptually, while replacing the EOL toolchain (Vue CLI/webpack,
 Vue 2, Vuetify 2, Electron 13). Electron is upgraded to a current LTS
 with **context isolation on** and a minimal typed preload API. d3 usage
 shrinks to scales/zoom behavior; geometry math comes from core.
+
+### Sampling modes
+
+Sample placement is a `(shape, sampling)` pair, resolved in one place —
+`core/sampling/plan.ts` — which both the store (generating points) and
+the canvas (re-deriving them to verify the grid it draws) call. Deriving
+it twice would let the drawn partition drift from the points it claims
+to describe, which would misrepresent real survey data.
+
+| Ring | `stratified-random` | `regular-grid` | `random` |
+|---|---|---|---|
+| 4 vertices (quad/square) | one random point per rows×cols cell | a fixed position per cell, or `fill` on the cell intersections | uniform over the whole quadrat |
+| n-poly | one random point per equal-area piece | the centre of each equal-area piece | uniform over the whole quadrat |
+
+`gridOrigin` picks where in each cell a grid point sits: the centre, one
+of the four corners, or `fill`. **`fill` is different in kind** — points
+go on the grid's *intersections* rather than inside its cells, so the
+quadrat's own edges and corners are sampled. Keeping the sample count at
+rows×cols then means the drawn grid has one fewer row and column of
+cells: an R×C lattice of intersections is an (R−1)×(C−1) grid. A single
+sample on an axis has no span to spread over, so it sits in the middle
+rather than collapsing onto one edge.
+
+A polygon has no rows×cols lattice — its equal-area pieces are the only
+grid it has — so `gridOrigin` is meaningless there. The UI locks the
+control to "centre" for n-poly and `defineBoundary` records `center`
+regardless, rather than storing an origin that had no effect. `random`
+is unstratified by design (points may clump), so it has no partition
+and draws no grid lines.
+
+Every mode yields exactly rows×cols points in the same index order
+(`row * cols + col` for quads), so changing mode never renumbers a
+quadrat's samples.
+
+Grid/cut lines are only drawn when the layout re-derived from the
+boundary, the stored seed and the quadrat's recorded mode matches the
+stored sample coordinates exactly; otherwise nothing is drawn.
+
+### Overlay legibility
+
+Survey images are busy and low-contrast, and the overlay is often the
+same hue as the substrate — amber sample points on a terracotta
+settlement plate being the worst case. No choice of hue survives every
+substrate, so legibility comes from **value contrast** instead: the whole
+overlay group carries a zero-offset dark drop-shadow (a casing), and each
+mark pairs a light fill with a dark rim. That reads on pale shell, dark
+algae and rust alike without the overlay shouting.
+
+Hierarchy, loudest first: the current sample > sample points > boundary >
+grid, which is reference
+only and therefore semi-transparent white rather than saturated. Palette
+and sizes live in one place, `OVERLAY` in `packages/ui/src/canvas.ts`;
+sizes are in display px at zoom 1 and are scaled by `overlayScale`.
+
+The current sample is drawn as a crosshair and **no circle at all**: it is
+the point being scored, so it has to be findable from across the image
+while leaving the substrate under it visible. Each of its four arms runs
+at full thickness from the tip inward, steps down to a hairline at its
+midpoint, and carries that hairline the rest of the way to the centre.
+That gives the open, four-tick look near the middle without an actual gap
+— a gap would leave the exact position to the eye's guess. The step is
+spread over a short ramp rather than a hard corner so it reads as
+deliberate at any zoom. SVG stroke width cannot vary along a line, so
+each arm is a polygon (`crosshairArms` in `canvas.ts`). The step only
+reads if the outer width is well above the hairline width; a couple of
+tenths of a pixel disappears into antialiasing.
+
+Boundary vertex handles are drawn **only while the boundary is being
+drawn**. Once it is committed they sit on top of the corner samples and
+hide the substrate being scored, and the polygon already shows the shape.
+
+### Selecting things on the canvas
+
+Overlay marks are small — a sample point is a 7px dot — so hitting one
+exactly is fiddly, especially on a trackpad in the field. Clicks are
+therefore resolved against a pick radius far larger than the mark
+(`OVERLAY.SAMPLE_PICK_RADIUS`). That immediately raises the problem the
+naive approach gets wrong: when two enlarged hit areas overlap, SVG picks
+whichever element was painted last, not the one the user aimed at.
+
+`Picker` (`packages/ui/src/selection.ts`) resolves overlaps **by
+distance**, so the nearest target always wins regardless of render order,
+with exact ties broken deterministically. It is generic over the target
+type so every selectable overlay goes through the same rule — sample
+points today, boundary vertices or annotations later — rather than each
+growing its own hit-testing. Sample circles are `pointer-events: none`;
+the canvas owns the click. Distances are measured in display px for the
+same reason angles and lengths are (see Drawing modes).
+
+### Selection must not rest on colour alone
+
+Species buttons take their selected and unselected colours from the
+user's own CSV, where the two can be near-identical shades. Selection is
+therefore also carried by a contrasting ring, a lift and full opacity
+(`SpeciesTab.vue`), plus `aria-pressed` for assistive tech — so the state
+reads at a glance whatever palette a survey uses. The emphasis stays
+outside the button: anything drawn inside it competes with the label at
+85×40.
+
+### Drawing modes
+
+`quad` completes on the fourth click, `square` on the **second** (the
+first side fixes the square, built at a right angle to it, clockwise on
+screen), `n-poly` on a click back on the first node (≥3 nodes, legacy
+0.025-per-axis tolerance). A dashed rubber band previews where the next
+vertex lands — in square mode, the whole square.
+
+Holding Ctrl snaps the segment to 15° steps and, from the third vertex
+of a quad or polygon, matches the previous segment's length. **Both are
+computed in display pixels, never in normalized coordinates**:
+normalized 0–1 coordinates are anisotropic whenever the image is not
+square, so an angle or length measured there does not match what the
+user sees, and a "square" would come out a rectangle. The fitted
+display box preserves the image aspect and zoom scales uniformly, so
+display px is a uniform scaling of image px. In n-poly mode the close
+test runs on the *constrained* point, so a length lock can put the
+first node out of reach — releasing Ctrl closes the ring.
 
 ### Image canvas (ported)
 
@@ -259,7 +387,8 @@ as a floor), including fast-check property tests; component suites for
 every Vue 3 component (stores, tabs, panels, and the image canvas —
 happy-dom, `InMemoryPlatformAdapter`, injected image sizer; conventions
 in AGENTS.md). E2E tests (Playwright, against the web build) cover the
-golden path, session round-trip, and crash-recovery flows (`apps/web/e2e/`).
+golden path, session round-trip, crash-recovery, and the sampling/shape
+controls (`apps/web/e2e/`).
 Visual verification of the desktop shell uses the `QUADRATOR_SHOT`
 screenshot hook rather than a snapshot suite (it works against the
 packaged binary too).
@@ -268,7 +397,8 @@ Planned, in rough order of value:
 
 1. **Coverage institutionalized**: `@vitest/coverage-v8` as a
    devDependency, `test:coverage` script, CI threshold on
-   `packages/core/src`.
+   `packages/core/src`. **Done** — CI runs `pnpm test:coverage`, so the
+   floor is enforced rather than merely configured.
 2. **Property-based tests** (fast-check) on `splitByArea` and
    serialization round-trips: random simple polygons/sessions, assert
    invariants (piece areas sum to total; cut endpoints on the ring;
@@ -283,7 +413,8 @@ Planned, in rough order of value:
 4. **E2E** (Playwright against the web build). **Done** for the core
    flows (`apps/web/e2e/`): golden path draw→tag→export with an exact
    CSV assertion (polygon mode), session save→reload→relink round-trip,
-   QA-table/hotkey behavior, and autosave "Continue Last Session"
+   QA-table/hotkey behavior, square/regular-grid and random sampling
+   driven through the real selects, and autosave "Continue Last Session"
    recovery. Runs in the adapter's download/`<input>` fallback mode
    (FS Access pickers can't be automated). Not yet covered:
    multi-image navigation with duplicate filenames, full species-CSV

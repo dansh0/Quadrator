@@ -3,6 +3,8 @@ import {
   GeometryError,
   area,
   bbox,
+  centroid,
+  interiorPoint,
   isClockwise,
   isPointInside,
   isSimple,
@@ -104,5 +106,111 @@ describe('isSimple', () => {
 
   it('rejects the self-intersecting bowtie', () => {
     expect(isSimple(bowtie)).toBe(false);
+  });
+});
+
+describe('centroid', () => {
+  it('is the exact centre of a square, whatever the winding', () => {
+    expect(centroid(unitSquare)).toEqual({ x: 0.5, y: 0.5 });
+    expect(centroid([...unitSquare].reverse())).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('is area-weighted, not the mean of the vertices', () => {
+    // A square with an extra vertex on one edge: vertex-mean would drift
+    // toward the duplicated edge, the true centroid does not.
+    const withMidpointVertex = [
+      { x: 0, y: 0 },
+      { x: 0.5, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+    ];
+    const c = centroid(withMidpointVertex);
+    expect(c.x).toBeCloseTo(0.5, 12);
+    expect(c.y).toBeCloseTo(0.5, 12);
+  });
+
+  it('lands OUTSIDE a sufficiently concave ring — the reason interiorPoint exists', () => {
+    // Wide, shallow "U": the centroid sits in the notch, not in the material.
+    const u = [
+      { x: 0, y: 0 },
+      { x: 6, y: 0 },
+      { x: 6, y: 6 },
+      { x: 5, y: 6 },
+      { x: 5, y: 1 },
+      { x: 1, y: 1 },
+      { x: 1, y: 6 },
+      { x: 0, y: 6 },
+    ];
+    expect(isPointInside(u, centroid(u))).toBe(false);
+  });
+
+  it('rejects rings that cannot have one', () => {
+    expect(() => centroid([])).toThrow(GeometryError);
+    expect(() => centroid(unitSquare.slice(0, 2))).toThrow(GeometryError);
+    expect(() =>
+      centroid([
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+      ])
+    ).toThrow(GeometryError);
+  });
+});
+
+describe('interiorPoint', () => {
+  it('returns the centroid when the centroid is already inside', () => {
+    expect(interiorPoint(unitSquare)).toEqual(centroid(unitSquare));
+    expect(interiorPoint(pentagon)).toEqual(centroid(pentagon));
+  });
+
+  it('returns a point inside for concave rings whose centroid escapes', () => {
+    const u = [
+      { x: 0, y: 0 },
+      { x: 6, y: 0 },
+      { x: 6, y: 6 },
+      { x: 5, y: 6 },
+      { x: 5, y: 1 },
+      { x: 1, y: 1 },
+      { x: 1, y: 6 },
+      { x: 0, y: 6 },
+    ];
+    const p = interiorPoint(u);
+    expect(isPointInside(u, p)).toBe(true);
+    expect(p).not.toEqual(centroid(u));
+    // stays on the centroid's scanline, in the widest span of it
+    expect(p.y).toBeCloseTo(centroid(u).y, 12);
+  });
+
+  it('is inside for the L-shape too', () => {
+    expect(isPointInside(lShape, interiorPoint(lShape))).toBe(true);
+  });
+
+  it('is deterministic', () => {
+    expect(interiorPoint(lShape)).toEqual(interiorPoint(lShape));
+  });
+
+  it('rejects a zero-area ring before computing anything', () => {
+    expect(() =>
+      interiorPoint([
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+      ])
+    ).toThrow(GeometryError);
+  });
+
+  it('throws rather than returning a point outside a self-intersecting ring', () => {
+    // A bow-tie whose lobes nearly cancel: the area is non-zero so the
+    // centroid is computed, but it lands far outside the ring's y range, so
+    // the scanline finds no interior span at all.
+    const nearCancellingBowtie = [
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+      { x: 0, y: 10 },
+      { x: 10.0001, y: 0 },
+    ];
+    expect(() => interiorPoint(nearCancellingBowtie)).toThrow(GeometryError);
+    expect(() => interiorPoint(nearCancellingBowtie)).toThrow(/no interior point/);
   });
 });

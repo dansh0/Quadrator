@@ -86,6 +86,9 @@ describe('App shell (Vue 3 + Vuetify 3 + Pinia + core wiring)', () => {
       boundary: [],
       geoDefined: false,
       rngSeed: null,
+      sampling: 'stratified-random',
+      shape: 'n-poly',
+      gridOrigin: 'center',
       samples: [],
     });
     session.currentQuadratId = 'q1';

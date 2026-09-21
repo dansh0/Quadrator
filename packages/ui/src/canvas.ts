@@ -8,7 +8,14 @@
  * - the SVG is sized to the image fitted inside the panel ("display px"),
  *   with a translate/scale zoom transform applied to one inner group.
  */
-import { SampleV1, Vec2 } from '@quadrator/core';
+import {
+  QuadratV2,
+  SampleV2,
+  SettingsV2,
+  Vec2,
+  mulberry32,
+  planSamples,
+} from '@quadrator/core';
 import { InjectionKey } from 'vue';
 
 export interface FittedSize {
@@ -77,20 +84,88 @@ export function overlayScale(k: number): number {
   return 1 / (0.5 + 0.5 * k);
 }
 
+/**
+ * Overlay palette and sizes.
+ *
+ * Survey images are busy, low-contrast and often the same hue as the
+ * overlay — orange sample points on a terracotta settlement plate is the
+ * worst case, and no choice of hue survives every substrate. So legibility
+ * comes from VALUE contrast instead: every element carries a dark casing
+ * (`CASING`, applied as a zero-offset shadow to the whole overlay group) and
+ * the marks themselves pair a light fill with a dark rim. That reads on pale
+ * shell, dark algae and rust alike without the overlay shouting.
+ *
+ * Visual hierarchy, loudest first: sample points (the data) > boundary (the
+ * structure) > grid (reference only, so it is white and semi-transparent
+ * rather than saturated).
+ */
+export const OVERLAY = {
+  /** Dark halo drawn under everything; the one thing doing the heavy lifting. */
+  CASING: 'rgba(0, 0, 0, 0.75)',
+  CASING_BLUR: 1.6,
+
+  BOUNDARY: '#ff3b30',
+  /** Boundary vertices: boundary-red core, light rim — reads as a handle. */
+  NODE_RIM: '#ffffff',
+  GRID: '#ffffff',
+  GRID_OPACITY: 0.62,
+
+  /** Dark rim shared by every sample point, whatever its state. */
+  SAMPLE_RIM: '#10161c',
+  SAMPLE_UNTAGGED: '#ffc93c',
+  SAMPLE_TAGGED: '#4dabf7',
+
+  CROSSHAIR: '#ffe600',
+
+  BOUNDARY_WIDTH: 2.25,
+  GRID_WIDTH: 1.25,
+  NODE_RADIUS: 6.5,
+  NODE_STROKE_WIDTH: 1.75,
+  SAMPLE_RADIUS: 7,
+  SAMPLE_STROKE_WIDTH: 2,
+  /**
+   * How close a click must land to select a sample, in display px at zoom 1.
+   * Deliberately far larger than SAMPLE_RADIUS — the dot is a target to aim
+   * at, not the thing you must hit. Overlaps are resolved by distance (see
+   * selection.ts), so a generous radius costs no accuracy.
+   */
+  SAMPLE_PICK_RADIUS: 20,
+  /** Distance from the sample to each arm's outer tip. */
+  CROSSHAIR_LENGTH: 22,
+  /**
+   * Thickness of the arm's outer half. Well above the hairline width: the
+   * step only reads if there is enough difference to see, and a couple of
+   * tenths of a pixel disappears into antialiasing.
+   */
+  CROSSHAIR_WIDTH: 3.5,
+  /** Thickness of the inner half — a hairline, so the centre is a point. */
+  CROSSHAIR_HAIRLINE_WIDTH: 1,
+  /** Where the arm steps up to full width, as a fraction of its length. */
+  CROSSHAIR_SHOULDER: 0.5,
+  /** How much of the arm the step itself occupies — short, so it reads sharp. */
+  CROSSHAIR_SHOULDER_RAMP: 0.08,
+} as const;
+
 export interface SampleColor {
   fill: string;
   stroke: string;
 }
 
 /**
- * Legacy sample-point palette: the current sample renders as crosshair only
- * (invisible circle keeps its click target), tagged samples are blue,
- * untagged orange.
+ * Sample-point palette, keeping the legacy meaning (warm = untagged, cool =
+ * tagged) but pairing each fill with a dark rim so it separates from the
+ * substrate.
+ *
+ * The current sample draws no circle at all — an unbroken crosshair renders
+ * in its place, so the intersection of the two lines marks the exact point
+ * being scored and nothing covers the substrate under it.
  */
-export function sampleColor(sample: SampleV1, isCurrent: boolean): SampleColor {
+export function sampleColor(sample: SampleV2, isCurrent: boolean): SampleColor {
   if (isCurrent) return { fill: 'none', stroke: 'none' };
-  if (sample.codes.length > 0) return { fill: 'lightblue', stroke: 'blue' };
-  return { fill: 'orange', stroke: 'darkorange' };
+  if (sample.codes.length > 0) {
+    return { fill: OVERLAY.SAMPLE_TAGGED, stroke: OVERLAY.SAMPLE_RIM };
+  }
+  return { fill: OVERLAY.SAMPLE_UNTAGGED, stroke: OVERLAY.SAMPLE_RIM };
 }
 
 /**
@@ -108,3 +183,197 @@ export const naturalImageSize: ImageSizer = (url) =>
     img.onerror = () => reject(new Error('image failed to load'));
     img.src = url;
   });
+
+// ---- drawing constraints ------------------------------------------------------
+//
+// All of this works in DISPLAY PIXELS, never in normalized coordinates.
+// Normalized 0–1 coords are anisotropic — the x and y scales differ whenever
+// the image is not square — so an angle or a length measured there does not
+// match what the user sees. The fitted display box preserves the image's
+// aspect ratio and zoom scales uniformly, so display px is a uniform scaling
+// of image px: a 15° angle and an equal-length side mean the same thing in
+// both, and a square is square.
+
+/** Ctrl-drag snaps segments to multiples of this many degrees. */
+export const ANGLE_SNAP_DEG = 15;
+
+export function toDisplay(p: Vec2, fitted: FittedSize): Vec2 {
+  return { x: p.x * fitted.width, y: p.y * fitted.height };
+}
+
+export function fromDisplay(p: Vec2, fitted: FittedSize): Vec2 {
+  return {
+    x: fitted.width === 0 ? 0 : p.x / fitted.width,
+    y: fitted.height === 0 ? 0 : p.y / fitted.height,
+  };
+}
+
+export interface ConstraintOptions {
+  /** Snap the segment's angle to ANGLE_SNAP_DEG multiples (Ctrl). */
+  snapAngle: boolean;
+  /** Force the segment's length to match the previous segment's (Ctrl). */
+  equalLength: boolean;
+}
+
+/**
+ * Apply the active drawing constraints to a cursor position, given the
+ * boundary nodes placed so far. All coordinates are image-normalized; the
+ * conversion to and from display px happens here.
+ *
+ * With no nodes yet, or no constraint active, the point is returned
+ * unchanged — the first vertex is always free.
+ */
+export function constrainPoint(
+  nodes: readonly Vec2[],
+  p: Vec2,
+  fitted: FittedSize,
+  opts: ConstraintOptions
+): Vec2 {
+  const prev = nodes[nodes.length - 1];
+  if (prev === undefined || (!opts.snapAngle && !opts.equalLength)) return p;
+  if (fitted.width === 0 || fitted.height === 0) return p;
+
+  const prevPx = toDisplay(prev, fitted);
+  const pPx = toDisplay(p, fitted);
+  const dx = pPx.x - prevPx.x;
+  const dy = pPx.y - prevPx.y;
+  const reach = Math.hypot(dx, dy);
+  if (reach === 0) return p;
+
+  const angle = opts.snapAngle ? snapToStep(Math.atan2(dy, dx), ANGLE_SNAP_DEG) : Math.atan2(dy, dx);
+
+  // Equal-length needs a previous segment to copy, so it only applies from
+  // the third vertex on; before that the cursor's own reach is kept.
+  const previousSegment = nodes[nodes.length - 2];
+  const length =
+    opts.equalLength && previousSegment !== undefined
+      ? distance(toDisplay(previousSegment, fitted), prevPx)
+      : reach;
+
+  return fromDisplay(
+    { x: prevPx.x + Math.cos(angle) * length, y: prevPx.y + Math.sin(angle) * length },
+    fitted
+  );
+}
+
+function snapToStep(radians: number, stepDeg: number): number {
+  const step = (stepDeg * Math.PI) / 180;
+  return Math.round(radians / step) * step;
+}
+
+function distance(a: Vec2, b: Vec2): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+/**
+ * The square defined by one side a→b: the other two corners sit at a right
+ * angle to that side, on the side you reach by turning clockwise on screen
+ * (for a left-to-right first side, the square hangs below it).
+ *
+ * Vertex order is v0=a, v1=b, v2, v3 — the order `sampleRect` and
+ * `sampleRectGrid` expect, with v0→v1 and v3→v2 as the "horizontal" pair.
+ *
+ * Computed in display px so the result is square on screen and in the image;
+ * doing it in normalized coordinates would produce a rectangle.
+ */
+export function squareRing(a: Vec2, b: Vec2, fitted: FittedSize): Vec2[] {
+  if (fitted.width === 0 || fitted.height === 0) return [];
+  const aPx = toDisplay(a, fitted);
+  const bPx = toDisplay(b, fitted);
+  // (dx, dy) rotated 90°: in y-down screen space this turns clockwise.
+  const perp = { x: -(bPx.y - aPx.y), y: bPx.x - aPx.x };
+  return [
+    a,
+    b,
+    fromDisplay({ x: bPx.x + perp.x, y: bPx.y + perp.y }, fitted),
+    fromDisplay({ x: aPx.x + perp.x, y: aPx.y + perp.y }, fitted),
+  ];
+}
+
+/**
+ * The partition lines to draw under a quadrat's samples: grid lines for a
+ * quadrilateral, equal-area cuts for a polygon, nothing for `random`.
+ *
+ * The layout is re-derived from the boundary, the stored seed and the mode
+ * the quadrat recorded, then checked against the stored sample positions. If
+ * they disagree — the row/col counts changed after this quadrat was defined,
+ * say — nothing is drawn. A grid that does not match its points would
+ * misrepresent how the data was collected, which is worse than no grid.
+ */
+export function quadratGridLines(
+  quadrat: QuadratV2 | null,
+  settings: SettingsV2 | undefined
+): readonly [Vec2, Vec2][] {
+  if (quadrat === null || settings === undefined) return [];
+  if (!quadrat.geoDefined || quadrat.rngSeed === null) return [];
+  if (quadrat.sampling === 'random') return [];
+
+  try {
+    const { points, lines } = planSamples(
+      quadrat.boundary,
+      {
+        numOfSampleRows: settings.numOfSampleRows,
+        numOfSampleCols: settings.numOfSampleCols,
+        sampling: quadrat.sampling,
+        gridOrigin: quadrat.gridOrigin,
+      },
+      mulberry32(quadrat.rngSeed)
+    );
+    const matches =
+      points.length === quadrat.samples.length &&
+      points.every((p, i) => p.x === quadrat.samples[i]?.x && p.y === quadrat.samples[i]?.y);
+    return matches ? lines : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The current sample's crosshair: four arms that run at full thickness from
+ * the tip inward, step down to a hairline at their midpoint, and carry that
+ * hairline the rest of the way to the centre.
+ *
+ * A plain cross puts its heaviest ink exactly where the sample is, hiding the
+ * substrate being scored; arms with a gap in the middle leave the position to
+ * the eye's guess. The stepped profile gives both — the open, four-tick look
+ * near the centre, with a fine line still converging on one unambiguous
+ * point. The step is spread over a short ramp rather than a hard corner, so
+ * it reads as deliberate at any zoom.
+ *
+ * SVG stroke width cannot vary along a line, so each arm is a polygon.
+ * Returns display-px points; `scale` is the overlay scale in force.
+ */
+export function crosshairArms(centre: Vec2, scale: number): Vec2[][] {
+  const length = OVERLAY.CROSSHAIR_LENGTH * scale;
+  const outer = (OVERLAY.CROSSHAIR_WIDTH * scale) / 2;
+  const hair = (OVERLAY.CROSSHAIR_HAIRLINE_WIDTH * scale) / 2;
+  const shoulder = length * OVERLAY.CROSSHAIR_SHOULDER;
+  const ramp = (length * OVERLAY.CROSSHAIR_SHOULDER_RAMP) / 2;
+
+  // right, down, left, up — y grows downward in image coordinates
+  const directions: Vec2[] = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+  ];
+
+  return directions.map((dir) => {
+    const perp: Vec2 = { x: -dir.y, y: dir.x };
+    const at = (along: number, across: number): Vec2 => ({
+      x: centre.x + dir.x * along + perp.x * across,
+      y: centre.y + dir.y * along + perp.y * across,
+    });
+    // Walked from the centre out along one side, then back along the other.
+    return [
+      at(0, hair),
+      at(shoulder - ramp, hair),
+      at(shoulder + ramp, outer),
+      at(length, outer),
+      at(length, -outer),
+      at(shoulder + ramp, -outer),
+      at(shoulder - ramp, -hair),
+      at(0, -hair),
+    ];
+  });
+}

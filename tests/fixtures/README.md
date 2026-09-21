@@ -18,16 +18,23 @@ Written by the retired Vue 2 app. These anchor the v0 → v1 migration
 - `session-v0-polygon.json` — a polygon-mode (non-rectangular) quadrat.
 - `session-v0-multi-image.json` — a multi-image session with tagged samples.
 
-## v1 — the format the app writes today
+## v1 — the previous versioned format
 
 - `session-v1-multi-image.json` — `session-v0-multi-image.json` migrated and
   saved (with a fixed `savedAt` so the file is stable). Holds both boundary
   kinds (a 4-vertex quad and a 7-vertex polygon), 50 samples and 8 tagged
-  points. It pins the v1 *reader* against a file on disk, so a future schema
+  points. Pins the v1 → v2 upgrade against a real file.
+
+## v2 — the format the app writes today
+
+- `session-v2-multi-image.json` — the v1 fixture above, upgraded and saved.
+  Adds the sampling controls: `sampling`, `shape` and `gridOrigin` on the
+  settings and on every quadrat. Pins the v2 *reader* and the exact
+  serializer output (the round-trip test compares bytes), so a future schema
   version cannot quietly stop loading current saves.
 
-  Regenerate only if the v1 serializer changes shape — and if it does, that
-  is a schema version bump plus a migration, not an edit to this file.
+  Neither file is regenerated when the format changes: a format change means
+  a new `schemaVersion`, a migration and a NEW fixture beside these.
 
 ## Species list
 

@@ -4,7 +4,7 @@
  * per-quadrat sampleNumber, which was inconsistent for rows ≠ cols).
  * Sample codes are written directly into the session store's quadrat.
  */
-import { SampleV1 } from '@quadrator/core';
+import { SampleV2 } from '@quadrator/core';
 import { defineStore } from 'pinia';
 import { useSessionStore } from './session.ts';
 
@@ -23,13 +23,13 @@ export const useTaggingStore = defineStore('tagging', {
   }),
 
   getters: {
-    samples(): SampleV1[] {
+    samples(): SampleV2[] {
       return useSessionStore().currentQuadrat?.samples ?? [];
     },
     sampleCount(): number {
       return this.samples.length;
     },
-    currentSample(): SampleV1 | null {
+    currentSample(): SampleV2 | null {
       return this.samples[this.cursor] ?? null;
     },
     /** Codes tagged at the cursor's sample. */

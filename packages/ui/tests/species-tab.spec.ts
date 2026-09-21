@@ -95,3 +95,51 @@ describe('SpeciesTab', () => {
     expect(session.currentQuadrat?.samples[0]?.codes).toEqual([]);
   });
 });
+
+describe('SpeciesTab selection emphasis', () => {
+  it('toggles the emphasis off again on a second click', async () => {
+    const { wrapper } = await mountTab();
+    const button = () => wrapper.find('[data-test="species-Ulva"]');
+
+    await button().trigger('click');
+    expect(button().classes()).toContain('species-btn--selected');
+
+    await button().trigger('click');
+    expect(button().classes()).not.toContain('species-btn--selected');
+  });
+
+  it('adds the selected ring class and announces the state to assistive tech', async () => {
+    const { wrapper } = await mountTab();
+    const button = () => wrapper.find('[data-test="species-Ulva"]');
+    expect(button().classes()).not.toContain('species-btn--selected');
+    expect(button().attributes('aria-pressed')).toBe('false');
+
+    await button().trigger('click');
+    expect(button().classes()).toContain('species-btn--selected');
+    expect(button().attributes('aria-pressed')).toBe('true');
+  });
+
+  it('emphasises only the codes tagged on the CURRENT sample', async () => {
+    const { wrapper } = await mountTab();
+    await wrapper.find('[data-test="species-Ulva"]').trigger('click');
+    expect(wrapper.find('[data-test="species-Ulva"]').classes()).toContain(
+      'species-btn--selected'
+    );
+    expect(wrapper.find('[data-test="species-Barn"]').classes()).not.toContain(
+      'species-btn--selected'
+    );
+
+    // moving to an untagged point clears every emphasis
+    await wrapper.find('[data-test="next-sample"]').trigger('click');
+    expect(wrapper.findAll('.species-btn--selected')).toHaveLength(0);
+  });
+
+  it('emphasis follows a hotkey tag, not just a click', async () => {
+    const { wrapper } = await mountTab();
+    keydown('q'); // first code in the CSV = Ulva
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-test="species-Ulva"]').classes()).toContain(
+      'species-btn--selected'
+    );
+  });
+});

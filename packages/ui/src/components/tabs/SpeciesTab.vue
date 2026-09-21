@@ -26,6 +26,10 @@ function label(code: string): string {
   return key ? `${code} [${key}]` : code;
 }
 
+function isSelected(code: string): boolean {
+  return tagging.selectedCodes.includes(code);
+}
+
 async function onLoadButtons(): Promise<void> {
   error.value = null;
   try {
@@ -97,10 +101,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
           <v-btn
             v-bind="props"
             class="species-btn ma-1"
-            :color="tagging.selectedCodes.includes(entry.code) ? entry.colorSelected : entry.color"
+            :class="{ 'species-btn--selected': isSelected(entry.code) }"
+            :color="isSelected(entry.code) ? entry.colorSelected : entry.color"
+            :elevation="isSelected(entry.code) ? 8 : 0"
+            :aria-pressed="isSelected(entry.code)"
             :data-test="`species-${entry.code}`"
             @click="tagging.toggleCode(entry.code)"
           >
+            <!-- Selection must not rest on colour alone: the palette comes
+                 from the user's CSV, where selected and unselected can be
+                 near-identical shades. The ring and lift read at a glance
+                 whatever colours a survey uses, without adding anything
+                 inside the button to compete with the label. -->
             {{ label(entry.code) }}
           </v-btn>
         </template>
@@ -156,5 +168,24 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   height: 40px;
   font-size: 0.8em;
   font-weight: bold;
+  /* keeps the ring from shifting the grid when it appears */
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  opacity: 0.88;
+  transition:
+    outline-color 120ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.species-btn--selected {
+  outline-color: rgb(var(--v-theme-on-surface));
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+/* the ring is decoration; focus must still be obvious for keyboard users */
+.species-btn:focus-visible {
+  outline-color: rgb(var(--v-theme-primary));
 }
 </style>
