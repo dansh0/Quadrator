@@ -295,6 +295,40 @@ they are recomputed from the boundary + stored `rngSeed`, and rendered
 only if the recomputed points exactly match the stored samples, so
 settings drift can never display a misleading partition.
 
+### Shell layout must never wrap
+
+`App.vue` is two columns: the canvas on the left, a fixed 400px panel on
+the right. That row is `flex-wrap: nowrap`, and the canvas column is
+`min-width: 0`. Both are load-bearing, not tidying.
+
+The canvas column's min-content width is the fitted SVG's width, and
+`fitContain` returns the *full* container width for any image wider than
+its column — the normal case for a landscape survey photo. So the row has
+no slack: narrowing the window by one pixel used to push the panel onto a
+second flex line. Because both columns are `fill-height` (`height: 100%`)
+and `html, body` are `overflow: hidden`, that line begins below the
+viewport with no scrollbar to reach it, and the panel was simply gone.
+
+Worse, it ratcheted. Alone on the first line, the canvas column took the
+whole width and re-fitted its SVG larger, so the wrap condition stayed
+true and restoring the window never brought the panel back. Browser zoom
+triggered it the same way, by shrinking the CSS-pixel viewport.
+
+`nowrap` alone would only convert the wrap into a horizontal overflow, so
+the canvas column also needs `min-width: 0` to shrink below its content
+and let the `ResizeObserver` re-fit the canvas smaller. The panel is
+`flex: 0 1 400px`: the canvas column's flex base is 0, so it absorbs all
+growth above 400px and none of the shrinkage below it — the panel holds
+400px at any usable window size and only yields once the canvas is
+already at zero, rather than being clipped by the viewport edge.
+
+Covered by `apps/web/e2e/layout.spec.ts`, which asserts the *settled*
+layout: a resize takes a frame or two, and the `ResizeObserver` is a tick
+behind that, so a single measurement can catch a half-applied layout. The
+failure being guarded is a state the layout never left, so the round-trip
+test (narrow, then restore) is the one that distinguishes a real fix from
+a layout that merely has not wrapped yet.
+
 ### Desktop shell security posture
 
 The legacy shell ran with `nodeIntegration: true` and no context
@@ -338,6 +372,36 @@ stays gone. Note the trade-off if macOS is ever shipped: on darwin the
 clipboard accelerators (Cmd+C/V/A) come from the Edit menu role, so a mac
 build would need a minimal `[{role:'appMenu'},{role:'editMenu'}]` instead
 of `null`.
+
+### Brand assets and app icons
+
+The brand artwork lives in `packages/ui/src/assets/`, which is the single
+source for every surface:
+
+| File | Used by |
+| --- | --- |
+| `QUADRATOR_LOGO_white_text_transparent.png` | the home screen wordmark |
+| `QUADRATOR_LOGO_no_text.png` (500x500) | the favicon on web and in the Electron renderer |
+| `pexels-pok-rie-33563-1031200.jpg` | the home screen background |
+
+`apps/desktop/build/icon.png` (256x256) and `icon.ico` are exports of the
+same no-text mark, kept separately because electron-builder reads them from
+`buildResources` to brand the installer, the AppImage and the Windows exe.
+
+Both `index.html` entry points (`packages/ui` for the Electron renderer,
+`apps/web` for the static site) link the favicon as a *relative* path into
+`packages/ui/src/assets/`, so Vite emits and hashes it like any other asset.
+It must not be served from a `public/` directory: both apps build with
+`base: './'` precisely so the bundle loads over `file://` inside Electron,
+and a root-absolute `/favicon.png` would not resolve there.
+
+The running window's icon is a separate concern from the packaged one. A
+packaged Windows exe and macOS bundle carry their icon in the binary, but on
+Linux — and in *every* unpackaged run — the window, taskbar and alt-tab icon
+come from `BrowserWindow`'s `icon` option, which was unset, leaving the
+default Electron logo. It is now set from `dist/icon.png`; `build.mjs` copies
+the file there because electron-builder only packages `dist/**`, `renderer/**`
+and `package.json`, so `build/` is unreadable at runtime.
 
 Cloud features (later phases) are **provider-agnostic**: a small sync
 interface (auth, blob storage for images, document storage for

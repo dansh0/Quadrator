@@ -79,8 +79,8 @@ onUnmounted(() => {
   <v-app>
     <v-main class="fill-height">
       <v-container fluid class="fill-height pa-1">
-        <v-row class="fill-height" align="stretch" no-gutters>
-          <v-col class="fill-height">
+        <v-row class="fill-height shell-row" align="stretch" no-gutters>
+          <v-col class="fill-height canvas-col">
             <v-card class="fill-height" color="tertiary">
               <!-- Home screen (legacy ImageViewer empty state) -->
               <div
@@ -144,7 +144,11 @@ onUnmounted(() => {
             </v-card>
           </v-col>
 
-          <v-col v-if="store.currentQuadrat" class="fill-height pl-2 right-panel-col">
+          <v-col
+            v-if="store.currentQuadrat"
+            class="fill-height pl-2 right-panel-col"
+            data-test="right-panel"
+          >
             <RightPanel @reset-nodes="store.resetBoundary()" />
           </v-col>
         </v-row>
@@ -163,10 +167,38 @@ body {
 </style>
 
 <style scoped>
-/* Legacy right panel is a fixed 400px (store.js windowHelpers.rightPanelWidth). */
+/* The two columns must never wrap onto a second flex line. Both are
+   `fill-height` (height: 100% !important), so a wrapped line starts at y =
+   100% of the row — off-screen, with no scrollbar to reach it because the
+   page itself never scrolls. Worse, it ratchets: once wrapped, the canvas
+   column is alone on line one and takes the full width, so the SVG it sizes
+   itself to grows, and the wrap condition can never become false again. That
+   is the "right panel vanished and won't come back" bug. */
+.shell-row {
+  flex-wrap: nowrap;
+}
+
+/* `nowrap` alone is not enough: the canvas column's automatic minimum size is
+   its content's min-content width, and `.canvas-container svg` is `flex:
+   none` at the fitted width — which fitContain sets to the full container
+   width for any image wider than the column. Without `min-width: 0` the row
+   would simply overflow to the right instead of wrapping, pushing the panel
+   out of view just the same. Letting the column shrink makes the canvas
+   re-measure smaller, which is what should have happened all along. */
+.canvas-col {
+  min-width: 0;
+}
+
+/* Legacy right panel is a fixed 400px (store.js windowHelpers.rightPanelWidth).
+   `0 1 400px` rather than `0 0 400px`: the canvas column's flex base is 0, so
+   it absorbs all the growth above 400px and none of the shrinkage below it.
+   The panel therefore holds 400px at any usable window size and only gives
+   ground once the canvas is already at zero, instead of being clipped by the
+   viewport edge. */
 .right-panel-col {
-  flex: 0 0 400px;
+  flex: 0 1 400px;
   max-width: 400px;
+  min-width: 0;
 }
 
 .home-screen {

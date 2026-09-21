@@ -178,6 +178,13 @@ async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
+    // The running window's icon — alt-tab, the taskbar and the window
+    // decoration on Linux, and every unpackaged run on any platform. The
+    // packaged Windows exe and macOS bundle carry their own icon from
+    // electron-builder, so without this only Linux and dev runs were left
+    // showing the default Electron logo. build.mjs copies the file into
+    // dist/ because `build/` is not packaged.
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

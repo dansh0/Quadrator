@@ -11,6 +11,11 @@
  * `--require-renderer` (used by the dist scripts) makes a missing UI build a
  * hard error instead of a warning.
  *
+ * Also copies the app icon into ./dist, because electron-builder only
+ * packages `dist/**`, `renderer/**` and package.json — `build/` is build-time
+ * resources for the installer, not something the running app can read. The
+ * main process needs its own copy to set the BrowserWindow icon.
+ *
  * Also keeps this package's `version` equal to the root package.json, which
  * is the single source of truth (the UI footer imports it). electron-builder
  * reads the version from here, so without this sync a packaged build would
@@ -56,6 +61,12 @@ await build({
   external: ['electron'],
   sourcemap: true,
 });
+
+// The window/taskbar icon, alongside the bundled main process that reads it.
+// build/icon.png is the 256x256 export of packages/ui/src/assets/
+// QUADRATOR_LOGO_no_text.png, and is also what electron-builder hands the
+// installer (see the `build` field in package.json).
+cpSync(path.join(here, 'build', 'icon.png'), path.join(here, 'dist', 'icon.png'));
 
 if (existsSync(path.join(uiDist, 'index.html'))) {
   rmSync(renderer, { recursive: true, force: true });
