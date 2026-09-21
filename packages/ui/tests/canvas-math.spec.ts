@@ -4,12 +4,19 @@ import {
   CLOSE_TOLERANCE,
   IDENTITY,
   OVERLAY,
+  centreOn,
   constrainPoint,
   crosshairArms,
+  easeInOutCubic,
   fitContain,
   fromDisplay,
   nearFirstNode,
   overlayScale,
+  PAN_MAX_MS,
+  PAN_MIN_MS,
+  RECENTRE_EDGE_MARGIN,
+  panDuration,
+  recentreTarget,
   sampleColor,
   squareRing,
   toDisplay,
@@ -334,5 +341,216 @@ describe('crosshairArms', () => {
     );
     expect(spread(scaled[0]![3]!, scaled[0]![4]!)).toBeCloseTo(OVERLAY.CROSSHAIR_WIDTH * 2, 6);
     expect(scaled[0]![3]!.x - centre.x).toBeCloseTo(OVERLAY.CROSSHAIR_LENGTH * 2, 6);
+  });
+});
+
+describe('centreOn', () => {
+  const fitted = { width: 800, height: 600 };
+
+  it('puts the point in the middle of the view', () => {
+    const t = centreOn({ x: 0.25, y: 0.75 }, fitted, 2);
+    // screen position = t.x + k * displayX
+    expect(t.x + t.k * 0.25 * fitted.width).toBeCloseTo(fitted.width / 2, 6);
+    expect(t.y + t.k * 0.75 * fitted.height).toBeCloseTo(fitted.height / 2, 6);
+  });
+
+  it('leaves the zoom level alone — navigating pans, it does not magnify', () => {
+    expect(centreOn({ x: 0.3, y: 0.3 }, fitted, 3.5).k).toBe(3.5);
+  });
+
+  it('is the identity translation for the centre point at zoom 1', () => {
+    expect(centreOn({ x: 0.5, y: 0.5 }, fitted, 1)).toEqual({ k: 1, x: 0, y: 0 });
+  });
+
+  it('works for any zoom, keeping the point pinned to the middle', () => {
+    for (const k of [1, 1.5, 4, 12]) {
+      const t = centreOn({ x: 0.1, y: 0.9 }, fitted, k);
+      expect(t.x + t.k * 0.1 * fitted.width).toBeCloseTo(fitted.width / 2, 6);
+      expect(t.y + t.k * 0.9 * fitted.height).toBeCloseTo(fitted.height / 2, 6);
+    }
+  });
+});
+
+describe('easeInOutCubic', () => {
+  it('starts at rest and ends at rest', () => {
+    expect(easeInOutCubic(0)).toBe(0);
+    expect(easeInOutCubic(1)).toBe(1);
+  });
+
+  it('passes through the halfway point halfway', () => {
+    expect(easeInOutCubic(0.5)).toBeCloseTo(0.5, 6);
+  });
+
+  it('is slow at the ends and quick in the middle', () => {
+    const near = (a: number, b: number) => easeInOutCubic(b) - easeInOutCubic(a);
+    expect(near(0, 0.1)).toBeLessThan(near(0.45, 0.55));
+    expect(near(0.9, 1)).toBeLessThan(near(0.45, 0.55));
+  });
+
+  it('never moves backwards', () => {
+    let previous = -1;
+    for (let t = 0; t <= 1; t += 0.05) {
+      const v = easeInOutCubic(t);
+      expect(v).toBeGreaterThanOrEqual(previous);
+      previous = v;
+    }
+  });
+
+  it('clamps input outside 0–1 rather than overshooting', () => {
+    expect(easeInOutCubic(-2)).toBe(0);
+    expect(easeInOutCubic(4)).toBe(1);
+  });
+});
+
+describe('recentreTarget', () => {
+  const fitted = { width: 800, height: 600 };
+
+  /** A transform that parks `at` exactly `offset` px from the view centre. */
+  const viewing = (at: Vec2, k: number, offset = { x: 0, y: 0 }) => {
+    const centred = centreOn(at, fitted, k);
+    return { k, x: centred.x + offset.x, y: centred.y + offset.y };
+  };
+
+  // Far enough off-centre to be outside the comfortable inset on both axes.
+  const wayOff = { x: 360, y: 260 };
+  const at = { x: 0.25, y: 0.75 };
+
+  const move = (over: Partial<Parameters<typeof recentreTarget>[0]> = {}) =>
+    recentreTarget({
+      at,
+      fromCanvasClick: false,
+      fitted,
+      current: viewing(at, 3, wayOff),
+      motion: 'smooth',
+      ...over,
+    });
+
+  it('centres the sample when the user navigates to one out of view', () => {
+    expect(move()?.transform).toEqual(centreOn(at, fitted, 3));
+  });
+
+  it('stays put when the sample was clicked on the canvas', () => {
+    expect(move({ fromCanvasClick: true })).toBeNull();
+  });
+
+  it('stays put when the whole image is already on screen', () => {
+    expect(move({ current: { k: 1, x: 0, y: 0 } })).toBeNull();
+    expect(move({ current: { k: 0.5, x: 0, y: 0 } })).toBeNull();
+  });
+
+  it('stays put for a sample that has no position', () => {
+    expect(move({ at: null })).toBeNull();
+  });
+
+  it('stays put before the canvas has been measured', () => {
+    expect(move({ fitted: { width: 0, height: 0 } })).toBeNull();
+  });
+
+  it('preserves the zoom level it was given', () => {
+    expect(move({ current: viewing(at, 7, wayOff) })?.transform.k).toBe(7);
+  });
+
+  describe('the comfortable zone', () => {
+    it('does not move for a point already near the middle', () => {
+      expect(move({ current: viewing(at, 4, { x: 10, y: 10 }) })).toBeNull();
+    });
+
+    it('does not move for a point anywhere inside the inset', () => {
+      const insetX = fitted.width * RECENTRE_EDGE_MARGIN;
+      const insetY = fitted.height * RECENTRE_EDGE_MARGIN;
+      // just inside each corner of the comfortable rectangle
+      const nearly = { x: fitted.width / 2 - insetX - 1, y: fitted.height / 2 - insetY - 1 };
+      expect(move({ current: viewing(at, 4, nearly) })).toBeNull();
+      expect(
+        move({ current: viewing(at, 4, { x: -nearly.x, y: -nearly.y }) })
+      ).toBeNull();
+    });
+
+    it('moves once the point crosses the inset on either axis', () => {
+      const overX = { x: fitted.width / 2 - fitted.width * RECENTRE_EDGE_MARGIN + 2, y: 0 };
+      const overY = { x: 0, y: fitted.height / 2 - fitted.height * RECENTRE_EDGE_MARGIN + 2 };
+      expect(move({ current: viewing(at, 4, overX) })).not.toBeNull();
+      expect(move({ current: viewing(at, 4, overY) })).not.toBeNull();
+    });
+
+    it('this is what stops a repetitive tagging run from panning constantly', () => {
+      // stepping along a row at moderate zoom keeps the next point in view
+      const k = 2;
+      let panned = 0;
+      for (let col = 0; col < 5; col++) {
+        const point = { x: (col + 0.5) / 5, y: 0.5 };
+        const current = viewing({ x: 0.5, y: 0.5 }, k);
+        if (recentreTarget({ at: point, fromCanvasClick: false, fitted, current, motion: 'smooth' })) {
+          panned++;
+        }
+      }
+      expect(panned).toBeLessThan(5);
+    });
+  });
+
+  describe('motion preference', () => {
+    it('off never moves the view at all', () => {
+      expect(move({ motion: 'off' })).toBeNull();
+    });
+
+    it('instant moves without animating', () => {
+      const decided = move({ motion: 'instant' });
+      expect(decided?.transform).toEqual(centreOn(at, fitted, 3));
+      expect(decided?.animate).toBe(false);
+    });
+
+    it('smooth animates a short move', () => {
+      expect(move()?.animate).toBe(true);
+    });
+  });
+
+  describe('long jumps cut instead of sweeping', () => {
+    // A cut carries no optic flow, so it is easier on the eye than a long
+    // fast pan — and at high zoom every move is a long one.
+    const far = { x: 0.02, y: 0.02 };
+
+    it('animates while the travel stays within a viewport', () => {
+      const current = viewing(at, 2, { x: 300, y: 0 });
+      expect(recentreTarget({ at, fromCanvasClick: false, fitted, current, motion: 'smooth' })?.animate).toBe(true);
+    });
+
+    it('cuts when the travel exceeds a viewport', () => {
+      const current = centreOn({ x: 0.98, y: 0.98 }, fitted, 8);
+      const decided = recentreTarget({ at: far, fromCanvasClick: false, fitted, current, motion: 'smooth' });
+      expect(decided).not.toBeNull();
+      expect(decided!.animate).toBe(false);
+      expect(decided!.transform).toEqual(centreOn(far, fitted, 8));
+    });
+
+    it('still lands in exactly the same place either way', () => {
+      const current = centreOn({ x: 0.98, y: 0.98 }, fitted, 8);
+      const cut = recentreTarget({ at: far, fromCanvasClick: false, fitted, current, motion: 'smooth' });
+      const instant = recentreTarget({ at: far, fromCanvasClick: false, fitted, current, motion: 'instant' });
+      expect(cut!.transform).toEqual(instant!.transform);
+    });
+  });
+});
+
+describe('panDuration', () => {
+  it('scales with distance, so long moves are not whipped across', () => {
+    expect(panDuration(600)).toBeLessThan(panDuration(900));
+  });
+
+  it('never dips below the floor, however small the move', () => {
+    expect(panDuration(0)).toBe(PAN_MIN_MS);
+    expect(panDuration(5)).toBe(PAN_MIN_MS);
+  });
+
+  it('never exceeds the ceiling, however large the move', () => {
+    expect(panDuration(100000)).toBe(PAN_MAX_MS);
+  });
+
+  it('holds the target velocity in between', () => {
+    const distance = 480; // 400ms at 1200px/s
+    expect(panDuration(distance)).toBeCloseTo(400, 6);
+  });
+
+  it('treats direction as irrelevant', () => {
+    expect(panDuration(-300)).toBe(panDuration(300));
   });
 });

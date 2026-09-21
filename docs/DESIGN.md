@@ -178,6 +178,59 @@ Boundary vertex handles are drawn **only while the boundary is being
 drawn**. Once it is committed they sit on top of the corner samples and
 hide the substrate being scored, and the polygon already shows the shape.
 
+### Keeping the current sample in view
+
+Navigating to a sample — hotkey, Prev/Next, or a QA-table row — brings that
+point into view when it is not already there. Zoom is preserved:
+navigating moves the view, it never changes magnification.
+
+**Motion sickness is the design constraint here.** Tagging is repetitive,
+so a session is hundreds of navigations, and the canvas fills the panel —
+a pan translates nearly the whole visual field, which is what provokes
+vection. Three things keep that in check:
+
+1. **A dead zone.** While the point sits within `RECENTRE_EDGE_MARGIN` of
+   every edge it is left alone. In the row-major sampling orders the next
+   point is usually already on screen, so most navigations produce no
+   motion at all. Cutting the *number* of pans matters far more than
+   making each one prettier.
+2. **Long moves cut instead of sweeping.** Past
+   `RECENTRE_JUMP_VIEWPORTS` of travel the view jumps. A hard cut carries
+   no optic flow, so the brain reads it as a scene change rather than
+   self-motion — counter-intuitively easier to take than a long fast pan.
+   At high zoom consecutive samples are always more than a screen apart,
+   so gliding is reserved for the moderate zooms where it is comfortable
+   and useful.
+3. **Distance-scaled duration** (`panDuration`, clamped between
+   `PAN_MIN_MS` and `PAN_MAX_MS`), so a short nudge stays snappy and a
+   longer move does not whip across at the same fixed duration.
+
+`recentreMotion` (**smooth / instant / off**) selects between these.
+**It defaults to `instant`** — a cut carries no optic flow at all, which
+is the safest behaviour to hand someone who has not chosen — and **no UI
+exposes it today**; the control was removed as clutter. The field, the
+store action and the schema entry are kept so it can be restored without a
+schema change, and a value already persisted still applies. The OS
+"reduce motion" flag is honoured on top, forcing `instant` unless the
+preference is `off`.
+
+Two more cases deliberately do nothing: a click on the point **on the
+canvas** (it is already where the user is looking, and moving the view out
+from under a click is disorienting), and a view at zoom 1 or below, where
+the whole image is on screen already. The tagging store records which kind
+of move happened in `cursorSource`. Every clause lives in one pure
+function, `recentreTarget` in `canvas.ts`.
+
+The animation drives d3-zoom itself each frame rather than animating a
+separate transform, so a pan or zoom the user starts mid-flight does not
+jump — and a user gesture cancels the animation outright, detected by
+d3's `sourceEvent` being set.
+
+d3-zoom needs real SVG matrix support, which happy-dom lacks, so the
+zoomed behaviour is proven by `recentreTarget`'s unit tests plus a
+Playwright suite (`apps/web/e2e/recentre.spec.ts`); the component tests
+cover the zoom-1 case and the `cursorSource` wiring.
+
 ### Selecting things on the canvas
 
 Overlay marks are small — a sample point is a 7px dot — so hitting one

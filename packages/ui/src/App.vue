@@ -63,6 +63,7 @@ watch(
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
   void species.init(platform);
+  void tagging.init(platform);
   void store.hasAutosaved(platform).then((v) => (hasAutosave.value = v));
 });
 onUnmounted(() => {

@@ -632,3 +632,60 @@ describe('ImageCanvas sample selection', () => {
     expect(useTaggingStore().activeTab).not.toBe('species');
   });
 });
+
+describe('ImageCanvas view recentring', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  // d3-zoom cannot run under happy-dom (no SVG matrix support), so the zoomed
+  // behaviour is proven by recentreTarget's unit tests and the Playwright
+  // suite. What is checked here is the wiring: at zoom 1 the view never moves,
+  // whatever moved the cursor.
+  async function withTwoSamples() {
+    return setup({
+      quadrat: quadrat({
+        boundary: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.9, y: 0.1 },
+          { x: 0.9, y: 0.9 },
+          { x: 0.1, y: 0.9 },
+        ],
+        geoDefined: true,
+        rngSeed: 42,
+        samples: [
+          { index: 0, x: 0.2, y: 0.2, codes: [] },
+          { index: 1, x: 0.8, y: 0.8, codes: [] },
+        ],
+      }),
+    });
+  }
+
+  it('leaves the transform alone when the whole image is already on screen', async () => {
+    const { wrapper } = await withTwoSamples();
+    const group = () => wrapper.find('g[transform]').attributes('transform');
+    const before = group();
+
+    useTaggingStore().nextSample();
+    await wrapper.vm.$nextTick();
+    expect(group()).toBe(before);
+    expect(group()).toContain('translate(0,0)');
+  });
+
+  it('records a canvas click as such, so a zoomed view would not chase it', async () => {
+    const { wrapper } = await withTwoSamples();
+    await clickAt(wrapper.find('[data-test="canvas-svg"]'), 0.8, 0.8);
+
+    const tagging = useTaggingStore();
+    expect(tagging.cursor).toBe(1);
+    expect(tagging.cursorSource).toBe('canvas');
+  });
+
+  it('records keyboard/button navigation as navigation', async () => {
+    const { wrapper } = await withTwoSamples();
+    await clickAt(wrapper.find('[data-test="canvas-svg"]'), 0.8, 0.8);
+    expect(useTaggingStore().cursorSource).toBe('canvas');
+
+    useTaggingStore().prevSample();
+    await wrapper.vm.$nextTick();
+    expect(useTaggingStore().cursorSource).toBe('navigation');
+  });
+});

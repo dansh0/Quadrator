@@ -26,16 +26,21 @@ import { select } from 'd3-selection';
 import { type D3ZoomEvent, type ZoomBehavior, zoom as d3zoom, zoomIdentity } from 'd3-zoom';
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue';
 import {
+  type CanvasTransform,
   IDENTITY,
   OVERLAY,
   constrainPoint,
   crosshairArms,
+  easeInOutCubic,
+  panDuration,
   fitContain,
   imageSizerKey,
   naturalImageSize,
   nearFirstNode,
   overlayScale,
+  prefersReducedMotion,
   quadratGridLines,
+  recentreTarget,
   sampleColor,
   squareRing,
   toNormalized,
@@ -324,6 +329,9 @@ onMounted(() => {
     // legacy rule: the view is only zoomable once the boundary is defined
     .filter((event: MouseEvent | WheelEvent) => geoDefined.value && !('button' in event && event.button))
     .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
+      // A user-driven gesture wins over a pan in flight; programmatic
+      // transforms (our own animation) carry no sourceEvent.
+      if (event.sourceEvent !== null && event.sourceEvent !== undefined) cancelPan();
       transform.value = { k: event.transform.k, x: event.transform.x, y: event.transform.y };
     });
   select(svg).call(zoomBehavior).on('dblclick.zoom', null);
@@ -345,6 +353,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelPan();
   resizeObserver?.disconnect();
   window.removeEventListener('keydown', onKeyChange);
   window.removeEventListener('keyup', onKeyChange);
@@ -352,11 +361,83 @@ onBeforeUnmount(() => {
 });
 
 function resetView(): void {
+  cancelPan();
   transform.value = IDENTITY;
   if (svgEl.value !== null && zoomBehavior !== null) {
     select(svgEl.value).call(zoomBehavior.transform, zoomIdentity);
   }
 }
+
+// ---- keeping the current sample in view ---------------------------------------
+
+/** Handle of the running pan animation, or null when the view is still. */
+let panFrame: number | null = null;
+
+function cancelPan(): void {
+  if (panFrame !== null) {
+    cancelAnimationFrame(panFrame);
+    panFrame = null;
+  }
+}
+
+/** Push a transform through d3-zoom so its internal state stays in step. */
+function applyTransform(t: CanvasTransform): void {
+  const svg = svgEl.value;
+  if (svg === null || zoomBehavior === null) return;
+  select(svg).call(zoomBehavior.transform, zoomIdentity.translate(t.x, t.y).scale(t.k));
+}
+
+/**
+ * Glide the view to `target`, easing in and out. Driving d3-zoom every frame
+ * (rather than animating a separate transform) keeps a pan the user starts
+ * mid-flight from jumping.
+ */
+function panTo(target: CanvasTransform): void {
+  cancelPan();
+  const start = { ...transform.value };
+  const dx = target.x - start.x;
+  const dy = target.y - start.y;
+  // Sub-pixel moves are not worth animating, or noticing.
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+
+  const duration = panDuration(Math.hypot(dx, dy));
+  let began: number | null = null;
+  const step = (now: number): void => {
+    began ??= now;
+    const progress = Math.min(1, (now - began) / duration);
+    const eased = easeInOutCubic(progress);
+    applyTransform({ k: target.k, x: start.x + dx * eased, y: start.y + dy * eased });
+    panFrame = progress < 1 ? requestAnimationFrame(step) : null;
+  };
+  panFrame = requestAnimationFrame(step);
+}
+
+/**
+ * Navigating to a sample brings it into view when it is not already there.
+ * Every condition lives in recentreTarget; the OS "reduce motion" setting is
+ * folded in here because it is an environment query, not a pure input.
+ */
+watch(
+  () => tagging.cursor,
+  () => {
+    if (!geoDefined.value) return;
+    const s = currentSample.value;
+    const preference = tagging.recentreMotion;
+    const motion =
+      preference !== 'off' && prefersReducedMotion() ? 'instant' : preference;
+
+    const move = recentreTarget({
+      at: s === null ? null : { x: s.x!, y: s.y! },
+      fromCanvasClick: tagging.cursorSource === 'canvas',
+      fitted: fitted.value,
+      current: transform.value,
+      motion,
+    });
+    if (move === null) return;
+    if (move.animate) panTo(move.transform);
+    else applyTransform(move.transform);
+  }
+);
 
 // Reset Nodes / quadrat switch: drop any in-progress drawing and re-center.
 watch(
