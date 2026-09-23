@@ -1,6 +1,6 @@
 {
   "name": "quadrator",
-  "version": "0.1.17",
+  "version": "0.2.1",
   "private": true,
   "packageManager": "pnpm@11.10.0",
   "scripts": {
