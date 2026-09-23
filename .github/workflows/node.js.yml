@@ -90,18 +90,20 @@ jobs:
       # only (the single source of truth). apps/desktop/package.json picks it
       # up at build time via apps/desktop/build.mjs. Left non-blocking on
       # purpose — a failed bump must not fail the build of a good commit.
+      # Bumps from the pushed commit's own version, and skips entirely when
+      # that commit already changed the version (a manual minor/major bump is
+      # kept exactly as written). HEAD~1 is the first parent, so a merge that
+      # brings in a new version counts as a manual bump.
       - name: "Automated Version Bump"
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          oldVersion=$(echo $(git show $(git log --first-parent -1 --skip 1 --pretty=format:"%H"):package.json) | jq -r ".version")
-          echo "$oldVersion"
-          IFS='.' read -r -a versionArray <<< "$oldVersion"
-          ((versionArray[2]=versionArray[2]+1))
-          newVersion="${versionArray[@]}"
-          newVersion=${newVersion// /.}
-          npm version "$newVersion"
-          git push origin ${{ github.ref }}
+          if git diff HEAD~1 HEAD -- package.json | grep -q '"version"'; then
+            echo "Version set manually in this push; skipping bump."
+          else
+            npm version patch
+            git push origin ${{ github.ref }}
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
