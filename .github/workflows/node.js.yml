@@ -1,43 +1,95 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+# CI: lint, typecheck, unit tests (with the core coverage floor) and the
+# Playwright E2E suite run on pushes to main and to the active work branch,
+# and on every PR to main. Version bump and Windows installer build run on
+# main only.
 
 name: Node.js CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, july_2026_review ]
   pull_request:
     branches: [ main ]
 
-# Add permissions block at the workflow level
 permissions:
   contents: write
   packages: write
 
 jobs:
+  test:
+    name: "Lint, Typecheck & Unit Tests"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@v4
+      - name: "Setup pnpm"
+        uses: pnpm/action-setup@v4
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: "Install dependencies"
+        run: pnpm install --frozen-lockfile
+      - name: "Lint"
+        run: pnpm lint
+      - name: "Typecheck (all workspaces)"
+        run: pnpm typecheck
+      - name: "Unit tests (+ core coverage floor)"
+        run: pnpm test:coverage
+
+  e2e:
+    name: "Web E2E (Playwright)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@v4
+      - name: "Setup pnpm"
+        uses: pnpm/action-setup@v4
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: "Install dependencies"
+        run: pnpm install --frozen-lockfile
+      - name: "Install Playwright browser"
+        run: pnpm --filter @quadrator/web exec playwright install chromium --with-deps
+      - name: "E2E tests"
+        run: pnpm --filter @quadrator/web e2e
+      - name: "Archive report on failure"
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
+
   bump-version:
     name: "Bump Version"
     runs-on: ubuntu-latest
-    # Add permissions for this specific job
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
 
     steps:
       - name: "Checkout source code"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
           fetch-depth: '2'
-      - name: "cat package.json"
-        run: cat ./package.json
       - name: "Setup Node.js"
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 12
-      - name: Dump GitHub context
-        env:
-          GITHUB_CONTEXT: ${{ toJson(github) }}
-        run: echo "$GITHUB_CONTEXT"
+          node-version: 22
+      # Best-effort convenience: bumps the ROOT package.json patch version
+      # only (the single source of truth). apps/desktop/package.json picks it
+      # up at build time via apps/desktop/build.mjs. Left non-blocking on
+      # purpose — a failed bump must not fail the build of a good commit.
       - name: "Automated Version Bump"
         run: |
           git config --local user.email "action@github.com"
@@ -53,32 +105,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
-        
+
   build-exe:
-    name: "Build Quadrator"
+    name: "Build Quadrator (Windows installer)"
     runs-on: windows-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: "Checkout source code"
-        uses: actions/checkout@v3
-      - name: "Setup Node"
-        uses: actions/setup-node@v3
+        uses: actions/checkout@v4
+      - name: "Setup pnpm"
+        uses: pnpm/action-setup@v4
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
         with:
-          node-version: 14
-      - name: "npm install"
-        run: npm install
-      - name: "Build .exe"
-        continue-on-error: true
-        run: |
-          npm run electron:build
+          node-version: 22
+          cache: pnpm
+      - name: "Install dependencies"
+        run: pnpm install --frozen-lockfile
+      - name: "Build installer"
+        run: pnpm package:desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: "Parse version"
         run: |
           echo "Q_VERSION=$(jq -r .version package.json)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Archive .exe
+      - name: Archive installer
         uses: actions/upload-artifact@v4
         with:
           name: Quadrator-${{env.Q_VERSION}}
           path: |
-            dist_electron/*.exe
+            apps/desktop/release/*.exe

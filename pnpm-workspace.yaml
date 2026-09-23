@@ -1,0 +1,11 @@
+packages:
+  - packages/*
+  - apps/*
+
+# pnpm blocks dependency build scripts unless allowed; electron downloads its
+# binary and esbuild verifies its platform binary. electron-winstaller only
+# builds Squirrel.Windows installers, which we don't ship (win target is nsis).
+allowBuilds:
+  electron: true
+  esbuild: true
+  electron-winstaller: false

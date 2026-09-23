@@ -25,3 +25,22 @@ pnpm-debug.log*
 #Electron-builder output
 /dist_electron
 Installers
+
+# Test coverage output
+/coverage
+
+# Local working notes (not part of the repo docs)
+/July2026Audit.md
+/July2026Plan.md
+# Vite build output (packages/ui)
+/packages/ui/dist
+
+# Desktop shell build output (apps/desktop)
+/apps/desktop/dist
+/apps/desktop/renderer
+/apps/desktop/release
+
+# Web shell build output (apps/web)
+/apps/web/dist
+/apps/web/playwright-report
+/apps/web/test-results
