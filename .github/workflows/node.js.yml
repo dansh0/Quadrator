@@ -1,19 +1,18 @@
 # CI: lint, typecheck, unit tests (with the core coverage floor) and the
-# Playwright E2E suite run on pushes to main and to the active work branch,
-# and on every PR to main. Version bump and Windows installer build run on
-# main only.
+# Playwright E2E suite run on pushes to main and on every PR to main.
+# Version bump runs on main only. The Windows installer is built on demand
+# by build-desktop.yml (manual dispatch).
 
 name: Node.js CI
 
 on:
   push:
-    branches: [ main, july_2026_review ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   test:
@@ -23,11 +22,11 @@ jobs:
       contents: read
     steps:
       - name: "Checkout source code"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: "Setup pnpm"
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
       - name: "Setup Node.js"
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -47,11 +46,11 @@ jobs:
       contents: read
     steps:
       - name: "Checkout source code"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: "Setup pnpm"
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
       - name: "Setup Node.js"
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -63,7 +62,7 @@ jobs:
         run: pnpm --filter @quadrator/web e2e
       - name: "Archive report on failure"
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: apps/web/playwright-report/
@@ -78,14 +77,17 @@ jobs:
 
     steps:
       - name: "Checkout source code"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
           fetch-depth: '2'
       - name: "Setup Node.js"
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
+          # No pnpm in this job; stop setup-node auto-caching from the
+          # root packageManager field.
+          package-manager-cache: false
       # Best-effort convenience: bumps the ROOT package.json patch version
       # only (the single source of truth). apps/desktop/package.json picks it
       # up at build time via apps/desktop/build.mjs. Left non-blocking on
@@ -108,33 +110,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-  build-exe:
-    name: "Build Quadrator (Windows installer)"
-    runs-on: windows-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: "Checkout source code"
-        uses: actions/checkout@v4
-      - name: "Setup pnpm"
-        uses: pnpm/action-setup@v4
-      - name: "Setup Node.js"
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: "Install dependencies"
-        run: pnpm install --frozen-lockfile
-      - name: "Build installer"
-        run: pnpm package:desktop
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: "Parse version"
-        run: |
-          echo "Q_VERSION=$(jq -r .version package.json)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Archive installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: Quadrator-${{env.Q_VERSION}}
-          path: |
-            apps/desktop/release/*.exe

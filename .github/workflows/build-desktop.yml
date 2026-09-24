@@ -1,0 +1,93 @@
+# Desktop build: packages installers on demand only (Actions tab →
+# "Build Desktop" → Run workflow). Not tied to pushes, so a merge to main
+# runs CI and the version bump without spending build runners. Pick the
+# branch and the platforms in the dispatch form; each installer takes that
+# branch's root package.json version (synced into apps/desktop by build.mjs).
+# electron-builder builds for the host OS, using the targets in
+# apps/desktop/package.json: nsis (.exe), AppImage and dmg.
+
+name: Build Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      windows:
+        description: "Windows installer (.exe)"
+        type: boolean
+        default: true
+      linux:
+        description: "Linux AppImage"
+        type: boolean
+        default: true
+      macos:
+        description: "macOS disk image (.dmg, unsigned, Apple silicon)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Turns the ticked platforms into the build matrix, so unticked ones never
+  # start a runner.
+  plan:
+    name: "Select platforms"
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          WINDOWS: ${{ inputs.windows }}
+          LINUX: ${{ inputs.linux }}
+          MACOS: ${{ inputs.macos }}
+        run: |
+          entries=()
+          [ "$WINDOWS" = true ] && entries+=('{"os":"windows-latest","platform":"windows","files":"apps/desktop/release/*.exe"}')
+          [ "$LINUX" = true ] && entries+=('{"os":"ubuntu-latest","platform":"linux","files":"apps/desktop/release/*.AppImage"}')
+          [ "$MACOS" = true ] && entries+=('{"os":"macos-latest","platform":"macos","files":"apps/desktop/release/*.dmg"}')
+          if [ ${#entries[@]} -eq 0 ]; then
+            echo "::error::No platform selected."
+            exit 1
+          fi
+          matrix="{\"include\":[$(IFS=,; echo "${entries[*]}")]}"
+          echo "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: "Build Quadrator (${{ matrix.platform }})"
+    needs: plan
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@v7
+      - name: "Setup pnpm"
+        uses: pnpm/action-setup@v6
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: "Install dependencies"
+        run: pnpm install --frozen-lockfile
+      # Publishing is disabled in apps/desktop/package.json ("publish": null);
+      # installers are only uploaded as workflow artifacts below. No signing
+      # identity exists on the runners, so skip the macOS keychain lookup
+      # rather than let electron-builder search for one.
+      - name: "Build installer"
+        run: pnpm package:desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: "Parse version"
+        shell: bash
+        run: echo "Q_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+      - name: "Archive installer"
+        uses: actions/upload-artifact@v7
+        with:
+          name: Quadrator-${{ env.Q_VERSION }}-${{ matrix.platform }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error

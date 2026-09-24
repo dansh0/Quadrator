@@ -1,6 +1,6 @@
 {
   "name": "@quadrator/desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Quadrator desktop shell: Electron with context isolation; implements PlatformAdapter over typed IPC.",
   "author": "Shores Design",
@@ -27,6 +27,7 @@
   "build": {
     "appId": "design.shores.quadrator",
     "productName": "Quadrator",
+    "publish": null,
     "directories": {
       "output": "release",
       "buildResources": "build"
