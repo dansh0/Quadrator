@@ -1,0 +1,16 @@
+# Response headers for the Cloudflare Workers static-assets deployment.
+# The app makes no network requests beyond its own files: images are
+# blob: object URLs, Vuetify injects inline <style> for its theme, and the
+# icon font is bundled. Anything outside this policy is blocked, so even
+# injected script could not send survey data anywhere.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+
+# Vite content-hashes everything under assets/, so it can be cached forever;
+# index.html keeps Workers' default revalidation so deploys show up at once.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

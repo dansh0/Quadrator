@@ -29,8 +29,10 @@ watch(geoDefined, (defined) => {
 <template>
   <v-card class="fill-height d-flex flex-column" color="tertiary">
     <!-- flex-grow-0: `grow` grows the tab *items* horizontally, but also lets
-         the bar itself grow inside this column flexbox -->
-    <v-tabs v-model="tab" bg-color="primary" density="compact" grow class="flex-grow-0">
+         the bar itself grow inside this column flexbox. flex-shrink-0: the
+         card has a fixed height, so a tall tab would otherwise squash the
+         bar instead of scrolling the content area below. -->
+    <v-tabs v-model="tab" bg-color="primary" density="compact" grow class="flex-grow-0 flex-shrink-0">
       <v-tab value="prep" class="px-1" data-test="tab-prep">Image Prep</v-tab>
       <v-tab value="species" class="px-1" :disabled="!geoDefined" data-test="tab-species">
         Species ID

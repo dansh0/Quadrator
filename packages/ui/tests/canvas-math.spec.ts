@@ -8,8 +8,12 @@ import {
   constrainPoint,
   crosshairArms,
   easeInOutCubic,
+  FIT_MARGIN_PX,
+  ZOOM_EXTENT,
   fitContain,
+  fitRingTransform,
   fromDisplay,
+  interpolateTransform,
   nearFirstNode,
   overlayScale,
   PAN_MAX_MS,
@@ -552,5 +556,242 @@ describe('panDuration', () => {
 
   it('treats direction as irrelevant', () => {
     expect(panDuration(-300)).toBe(panDuration(300));
+  });
+});
+
+describe('fitRingTransform', () => {
+  // A square image fitted to a square SVG box, inside a wider panel — the
+  // letterboxed case the function exists to handle.
+  const fitted = { width: 600, height: 600 };
+  const viewport = { width: 1000, height: 600 };
+  const square = (a: number, b: number): Vec2[] => [
+    { x: a, y: a },
+    { x: b, y: a },
+    { x: b, y: b },
+    { x: a, y: b },
+  ];
+
+  /** Where a normalized point lands on screen under `t`. */
+  const project = (p: Vec2, t: { k: number; x: number; y: number }) => ({
+    x: t.x + t.k * p.x * fitted.width,
+    y: t.y + t.k * p.y * fitted.height,
+  });
+
+  it('scales the ring to the binding axis, less the margin', () => {
+    // 0.25–0.75 of a 600px box = a 300px square; the 600px-high viewport
+    // binds on height: (600 - 60) / 300 = 1.8
+    const t = fitRingTransform(square(0.25, 0.75), fitted, viewport)!;
+    expect(t.k).toBeCloseTo(1.8, 6);
+  });
+
+  it('leaves exactly the margin on the axis it hits first', () => {
+    const ring = square(0.25, 0.75);
+    const t = fitRingTransform(ring, fitted, viewport)!;
+    const top = project({ x: 0.25, y: 0.25 }, t);
+    const bottom = project({ x: 0.75, y: 0.75 }, t);
+    // The viewport's centre coincides with the SVG box's centre, so the
+    // panel's top edge sits above the SVG's by half the difference.
+    const overhangY = (viewport.height - fitted.height) / 2;
+    expect(top.y + overhangY).toBeCloseTo(FIT_MARGIN_PX, 6);
+    expect(bottom.y + overhangY).toBeCloseTo(viewport.height - FIT_MARGIN_PX, 6);
+  });
+
+  it('gives the non-binding axis more room than the margin', () => {
+    const ring = square(0.25, 0.75);
+    const t = fitRingTransform(ring, fitted, viewport)!;
+    const left = project({ x: 0.25, y: 0.25 }, t);
+    const overhangX = (viewport.width - fitted.width) / 2;
+    expect(left.x + overhangX).toBeGreaterThan(FIT_MARGIN_PX);
+  });
+
+  it('binds on width when the ring is wider than the viewport aspect', () => {
+    const wide: Vec2[] = [
+      { x: 0.05, y: 0.45 },
+      { x: 0.95, y: 0.45 },
+      { x: 0.95, y: 0.55 },
+      { x: 0.05, y: 0.55 },
+    ];
+    // 540px wide, 60px tall; width gives (1000-60)/540 = 1.74,
+    // height would give (600-60)/60 = 9 — width binds.
+    const t = fitRingTransform(wide, fitted, viewport)!;
+    expect(t.k).toBeCloseTo((viewport.width - 2 * FIT_MARGIN_PX) / 540, 6);
+  });
+
+  it('centres the ring, not the image', () => {
+    // A ring off in one corner still ends up in the middle of the view.
+    const corner = square(0.05, 0.25);
+    const t = fitRingTransform(corner, fitted, viewport)!;
+    const centre = project({ x: 0.15, y: 0.15 }, t);
+    expect(centre.x).toBeCloseTo(fitted.width / 2, 6);
+    expect(centre.y).toBeCloseTo(fitted.height / 2, 6);
+  });
+
+  it('honours a caller-supplied margin', () => {
+    const ring = square(0.25, 0.75);
+    const tight = fitRingTransform(ring, fitted, viewport, 0)!;
+    expect(tight.k).toBeCloseTo(viewport.height / 300, 6);
+    expect(tight.k).toBeGreaterThan(fitRingTransform(ring, fitted, viewport)!.k);
+  });
+
+  it('never asks for a zoom outside what d3-zoom allows', () => {
+    // A ring far smaller than a pixel would want an enormous scale.
+    const speck: Vec2[] = [
+      { x: 0.5, y: 0.5 },
+      { x: 0.5000001, y: 0.5 },
+      { x: 0.5000001, y: 0.5000001 },
+      { x: 0.5, y: 0.5000001 },
+    ];
+    expect(fitRingTransform(speck, fitted, viewport)!.k).toBe(ZOOM_EXTENT[1]);
+
+    // and the floor, for a ring in a viewport barely larger than the margin
+    const huge: Vec2[] = [
+      { x: 0, y: 0 },
+      { x: 1e6, y: 0 },
+      { x: 1e6, y: 1e6 },
+      { x: 0, y: 1e6 },
+    ];
+    expect(fitRingTransform(huge, fitted, viewport)!.k).toBe(ZOOM_EXTENT[0]);
+  });
+
+  describe('declines to frame', () => {
+    it('a ring that is not a polygon', () => {
+      expect(fitRingTransform([], fitted, viewport)).toBeNull();
+      expect(fitRingTransform(square(0.2, 0.8).slice(0, 2), fitted, viewport)).toBeNull();
+    });
+
+    it('an unmeasured image box', () => {
+      expect(fitRingTransform(square(0.2, 0.8), { width: 0, height: 0 }, viewport)).toBeNull();
+      expect(fitRingTransform(square(0.2, 0.8), { width: 600, height: 0 }, viewport)).toBeNull();
+    });
+
+    it('an unmeasured viewport', () => {
+      expect(fitRingTransform(square(0.2, 0.8), fitted, { width: 0, height: 0 })).toBeNull();
+      expect(fitRingTransform(square(0.2, 0.8), fitted, { width: 900, height: 0 })).toBeNull();
+    });
+
+    it('a ring with no area, which has no aspect to match', () => {
+      const flat: Vec2[] = [
+        { x: 0.2, y: 0.5 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.8, y: 0.5 },
+      ];
+      expect(fitRingTransform(flat, fitted, viewport)).toBeNull();
+      const upright: Vec2[] = [
+        { x: 0.5, y: 0.2 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.5, y: 0.8 },
+      ];
+      expect(fitRingTransform(upright, fitted, viewport)).toBeNull();
+    });
+
+    it('a viewport too small to hold the margin', () => {
+      const ring = square(0.2, 0.8);
+      expect(fitRingTransform(ring, fitted, { width: 50, height: 400 })).toBeNull();
+      expect(fitRingTransform(ring, fitted, { width: 400, height: 50 })).toBeNull();
+    });
+  });
+});
+
+describe('interpolateTransform', () => {
+  const centre = { x: 300, y: 300 };
+  const from = { k: 1, x: 0, y: 0 };
+  const to = { k: 4, x: -900, y: -300 };
+
+  it('starts exactly where it started', () => {
+    expect(interpolateTransform(from, to, centre, 0)).toEqual(from);
+  });
+
+  it('lands exactly on the target', () => {
+    const end = interpolateTransform(from, to, centre, 1);
+    expect(end.k).toBeCloseTo(to.k, 9);
+    expect(end.x).toBeCloseTo(to.x, 9);
+    expect(end.y).toBeCloseTo(to.y, 9);
+  });
+
+  it('clamps progress outside 0–1 rather than overshooting', () => {
+    expect(interpolateTransform(from, to, centre, -3)).toEqual(
+      interpolateTransform(from, to, centre, 0)
+    );
+    expect(interpolateTransform(from, to, centre, 7)).toEqual(
+      interpolateTransform(from, to, centre, 1)
+    );
+  });
+
+  it('interpolates scale geometrically, not linearly', () => {
+    // halfway from 1x to 4x is 2x (the geometric mean), not 2.5x
+    expect(interpolateTransform(from, to, centre, 0.5).k).toBeCloseTo(2, 9);
+  });
+
+  it('keeps the framed point in the middle of the view throughout', () => {
+    // The point `to` centres is the one the animation should hold on to.
+    const focus = { x: (centre.x - to.x) / to.k, y: (centre.y - to.y) / to.k };
+    const startOnScreen = {
+      x: from.x + from.k * focus.x,
+      y: from.y + from.k * focus.y,
+    };
+    for (const t of [0.25, 0.5, 0.75]) {
+      const m = interpolateTransform(from, to, centre, t);
+      const onScreen = { x: m.x + m.k * focus.x, y: m.y + m.k * focus.y };
+      // straight line from where it was to the centre
+      expect(onScreen.x).toBeCloseTo(startOnScreen.x + (centre.x - startOnScreen.x) * t, 9);
+      expect(onScreen.y).toBeCloseTo(startOnScreen.y + (centre.y - startOnScreen.y) * t, 9);
+    }
+  });
+
+  it('reduces to a plain linear translate when the zoom does not change', () => {
+    // This is the sample-to-sample pan, whose behaviour must not have moved.
+    const a = { k: 2.5, x: 40, y: -60 };
+    const b = { k: 2.5, x: -200, y: 130 };
+    for (const t of [0, 0.3, 0.7, 1]) {
+      const m = interpolateTransform(a, b, centre, t);
+      expect(m.k).toBeCloseTo(2.5, 9);
+      expect(m.x).toBeCloseTo(a.x + (b.x - a.x) * t, 9);
+      expect(m.y).toBeCloseTo(a.y + (b.y - a.y) * t, 9);
+    }
+  });
+});
+
+describe('the zoom floor is the fill state', () => {
+  // The floor of 1 is only correct because of this invariant: the SVG is
+  // sized to fitContain, so at k = 1 the image already meets the panel on one
+  // axis. If fitContain ever stopped being a contain-fit, the floor would
+  // silently start meaning something else.
+  it('fitContain always fills at least one axis exactly', () => {
+    const cases: [number, number, number][] = [
+      [1000, 600, 4 / 3], // panel wider than the image: height binds
+      [600, 1000, 4 / 3], // panel taller: width binds
+      [800, 800, 2], // square panel, wide image
+      [800, 800, 0.5], // square panel, tall image
+      [1280, 720, 1280 / 720], // aspects match: both fill
+      [937, 611, 1.618],
+    ];
+    for (const [cw, ch, aspect] of cases) {
+      const f = fitContain(cw, ch, aspect);
+      const fillsWidth = Math.abs(f.width - cw) < 1e-9;
+      const fillsHeight = Math.abs(f.height - ch) < 1e-9;
+      expect(fillsWidth || fillsHeight, `${cw}x${ch} @ ${aspect}`).toBe(true);
+      // and it never overflows the panel, which is what makes 1 a *floor*
+      expect(f.width).toBeLessThanOrEqual(cw + 1e-9);
+      expect(f.height).toBeLessThanOrEqual(ch + 1e-9);
+    }
+  });
+
+  it('is set to that scale', () => {
+    expect(ZOOM_EXTENT[0]).toBe(1);
+  });
+
+  it('clamps a quadrat that wants to sit further out than the whole image', () => {
+    // A ring covering the entire image cannot have its 30px margin without
+    // zooming out past fill, so it frames at the floor instead.
+    const fitted = { width: 600, height: 600 };
+    const viewport = { width: 1000, height: 600 };
+    const whole: Vec2[] = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+    ];
+    // unclamped this would be (600 - 60) / 600 = 0.9
+    expect(fitRingTransform(whole, fitted, viewport)!.k).toBe(1);
   });
 });

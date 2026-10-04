@@ -38,9 +38,36 @@ export async function captureDownload(page: Page, trigger: () => Promise<void>):
 }
 
 /**
+ * Wait until the canvas view stops moving.
+ *
+ * Committing a boundary starts a one-time framing animation (see
+ * `frameQuadrat` in ImageCanvas.vue), so the transform is in motion for a few
+ * hundred ms after the ring closes. Anything that reads or depends on the
+ * transform has to let that finish first, or it races.
+ */
+export async function settleView(page: Page): Promise<string> {
+  let last = '';
+  await expect
+    .poll(
+      async () => {
+        const now =
+          (await page.getByTestId('canvas-svg').locator('g').first().getAttribute('transform')) ??
+          '';
+        const stable = now !== '' && now === last;
+        last = now;
+        return stable;
+      },
+      { message: 'canvas view settles', timeout: 5000 }
+    )
+    .toBe(true);
+  return last;
+}
+
+/**
  * Load the fixture image from the home screen and draw the standard quad
  * boundary (clicks at 10%/90% corners of the canvas — quad mode
- * auto-completes on the 4th node and generates the 5×5 sample grid).
+ * auto-completes on the 4th node and generates the 5×5 sample grid), then
+ * wait for the framing animation to come to rest.
  */
 export async function loadImageAndDrawQuad(page: Page): Promise<void> {
   await pickFiles(
@@ -66,6 +93,7 @@ export async function loadImageAndDrawQuad(page: Page): Promise<void> {
   }
   await expect(page.getByTestId('boundary-polygon')).toBeVisible();
   await expect(page.getByTestId('sample-0')).toBeVisible();
+  await settleView(page);
 }
 
 /** Load the two-species fixture button set on the Species ID tab. */

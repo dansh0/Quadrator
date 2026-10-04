@@ -39,8 +39,12 @@ async function onExport(): Promise<void> {
 </script>
 
 <template>
-  <v-container fluid class="pa-0">
-    <v-table v-if="rows.length > 0" density="compact" class="ma-4 qa-table elevation-1" data-test="qa-table">
+  <!-- Column filling RightPanel's scroll area: the table takes the leftover
+       height and scrolls itself, so the note and Export button stay in view.
+       Flex margins don't collapse, hence mt-4 on each block plus a closing
+       mb-4 instead of ma-4. -->
+  <v-container fluid class="pa-0 qa-layout d-flex flex-column">
+    <v-table v-if="rows.length > 0" density="compact" class="mx-4 mt-4 qa-table elevation-1" data-test="qa-table">
       <thead>
         <tr>
           <th>Point</th>
@@ -60,23 +64,23 @@ async function onExport(): Promise<void> {
         </tr>
       </tbody>
     </v-table>
-    <v-alert v-else type="info" density="compact" variant="outlined" class="ma-4" data-test="qa-empty">
+    <v-alert v-else type="info" density="compact" variant="outlined" class="mx-4 mt-4 qa-fixed" data-test="qa-empty">
       No data yet – run an analysis first.
     </v-alert>
 
-    <v-alert type="info" density="compact" variant="outlined" class="ma-4">
+    <v-alert type="info" density="compact" variant="outlined" class="mx-4 mt-4 qa-fixed">
       Review and verify species for each quadrat point above. When finished, click below to export
       the coverage data.
     </v-alert>
-    <v-alert v-if="error" type="error" density="compact" class="ma-4" data-test="qa-error">
+    <v-alert v-if="error" type="error" density="compact" class="mx-4 mt-4 qa-fixed" data-test="qa-error">
       {{ error }}
     </v-alert>
 
-    <v-row class="justify-center mt-4 pa-0">
+    <div class="d-flex justify-center qa-fixed my-4">
       <v-btn color="primary" data-test="qa-export" @click="onExport">
         <v-icon start>mdi-download</v-icon> Export Results
       </v-btn>
-    </v-row>
+    </div>
     <v-snackbar :model-value="exported" timeout="3000" @update:model-value="exported = false">
       Data exported successfully.
     </v-snackbar>
@@ -84,10 +88,22 @@ async function onExport(): Promise<void> {
 </template>
 
 <style scoped>
+.qa-layout {
+  height: 100%;
+}
+/* Grows into the free height; the min-height floor keeps a few rows visible
+   on very short windows, where RightPanel's own scroll takes over. */
 .qa-table {
-  max-height: 75vh;
+  flex: 1 1 auto;
+  min-height: 120px;
   overflow-y: auto;
   cursor: pointer;
+}
+/* Everything below the table keeps its natural height. `flex: none` rather
+   than flex-shrink-0 because v-alert brings its own zero flex-basis, which
+   would collapse it to a sliver. */
+.qa-fixed {
+  flex: none;
 }
 .qa-current {
   background: rgba(var(--v-theme-primary), 0.18);

@@ -1,7 +1,8 @@
 # CI: lint, typecheck, unit tests (with the core coverage floor) and the
 # Playwright E2E suite run on pushes to main and on every PR to main.
-# Version bump runs on main only. The Windows installer is built on demand
-# by build-desktop.yml (manual dispatch).
+# On pushes to main, once both pass, the web app deploys to Cloudflare
+# (deploy-web). Version bump runs on main only. The Windows installer is
+# built on demand by build-desktop.yml (manual dispatch).
 
 name: Node.js CI
 
@@ -67,6 +68,45 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 7
+
+  # Static build of apps/web to Cloudflare Workers static assets
+  # (apps/web/wrangler.jsonc). The API token is a secret of the `production`
+  # environment, which is restricted to main in the repo settings — fork PRs
+  # and other branches can never read it. The version-bump commit pushed by
+  # bump-version uses GITHUB_TOKEN and so does not trigger a second deploy.
+  deploy-web:
+    name: "Deploy Web App (Cloudflare)"
+    needs: [ test, e2e ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: "Setup pnpm"
+        uses: pnpm/action-setup@v6
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: "Install dependencies"
+        run: pnpm install --frozen-lockfile
+      - name: "Build web app"
+        run: pnpm --filter @quadrator/web build
+      - name: "Deploy to Cloudflare"
+        run: pnpm --filter @quadrator/web exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: "false"
 
   bump-version:
     name: "Bump Version"

@@ -5,7 +5,9 @@ packages:
 # pnpm blocks dependency build scripts unless allowed; electron downloads its
 # binary and esbuild verifies its platform binary. electron-winstaller only
 # builds Squirrel.Windows installers, which we don't ship (win target is nsis).
+# workerd (via wrangler, the web deploy CLI) verifies its platform binary.
 allowBuilds:
   electron: true
   esbuild: true
   electron-winstaller: false
+  workerd: true

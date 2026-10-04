@@ -11,7 +11,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import path from 'node:path';
-import { FIXTURES, forceFallbackMode, pickFiles } from './helpers.ts';
+import { FIXTURES, forceFallbackMode, pickFiles, settleView } from './helpers.ts';
 
 /** Must match RECENTRE_EDGE_MARGIN in packages/ui/src/canvas.ts. */
 const EDGE_MARGIN = 0.15;
@@ -85,6 +85,9 @@ async function setUp(page: Page): Promise<void> {
     await svg.click({ position: { x: box.width * fx, y: box.height * fy } });
   }
   await expect(page.getByTestId('sample-0')).toBeVisible();
+  // Committing the ring frames it; let that animation finish before any test
+  // reads the transform it is about to assert on.
+  await settleView(page);
   // Prev/Next and the motion preference live on the Species ID tab
   // (SpeciesTab.vue); the canvas stays visible beside it.
   await page.getByTestId('tab-species').click();
@@ -258,8 +261,20 @@ test('clicking a sample on the canvas does not move the view', async ({ page }) 
   expect(await transformOf(page)).toBe(before);
 });
 
-test('at default zoom navigating never moves the view', async ({ page }) => {
+test('with the whole image on screen, navigating never moves the view', async ({ page }) => {
+  // Framing a committed quadrat now leaves the view zoomed IN (k > 1), so
+  // the k <= 1 case this guards has to be reached deliberately by zooming
+  // back out — it is no longer where drawing a boundary leaves you.
   await setUp(page);
+  const centre = centreOfBox(await view(page));
+  await page.mouse.move(centre.x, centre.y);
+  const scaleNow = async () =>
+    Number(/scale\(([-\d.]+)\)/.exec((await transformOf(page))!)![1]);
+  for (let i = 0; i < 20 && (await scaleNow()) > 1; i++) {
+    await page.mouse.wheel(0, 120);
+  }
+  expect(await scaleNow(), 'zoomed back out to whole-image scale').toBeLessThanOrEqual(1);
+
   const before = await transformOf(page);
   for (let i = 0; i < 5; i++) await page.getByTestId('next-sample').click();
   await page.waitForTimeout(700);

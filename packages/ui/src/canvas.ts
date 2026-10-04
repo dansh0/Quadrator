@@ -505,3 +505,129 @@ export function prefersReducedMotion(): boolean {
     return false;
   }
 }
+
+// ---- framing a committed quadrat ----------------------------------------------
+
+/**
+ * d3-zoom's scale extent, shared so the fit math can never ask for a zoom the
+ * behaviour would silently clamp — which would leave our animation's last
+ * frame disagreeing with d3's internal state.
+ *
+ * The floor of **1 is not arbitrary**: the SVG is sized to the image fitted
+ * (contain) inside the panel, so k = 1 is exactly the scale at which one pair
+ * of the image's edges meets the panel's. That is the furthest out it is
+ * useful to go. Below it the image would sit with background margins on BOTH
+ * axes at once — shrinking into the middle of the panel — which shows less of
+ * the substrate while making it smaller to score.
+ *
+ * `fitted` is recomputed from the panel on every resize, so the floor stays
+ * the fill state at any window size rather than pinning a fixed magnification.
+ *
+ * The consequence for `fitRingTransform`: a quadrat spanning the whole image
+ * would want a scale below 1 to clear its margin, and gets clamped to 1
+ * instead. Filling the panel wins over honouring the margin — there is
+ * nothing beyond the image edge worth showing to buy that gap.
+ */
+export const ZOOM_EXTENT: readonly [number, number] = [1, 100];
+
+/**
+ * Breathing room left around the quadrat when the view frames it, in display
+ * px. Applied to whichever axis binds first, so the other gets more.
+ */
+export const FIT_MARGIN_PX = 30;
+
+/**
+ * How long the one-time framing animation runs, in ms.
+ *
+ * Fixed rather than distance-scaled (unlike `panDuration`): this fires once
+ * per quadrat as an orientation cue, so a consistent, deliberate motion reads
+ * better than one whose speed varies with how far the view happened to
+ * travel.
+ */
+export const FIT_DURATION_MS = 500;
+
+/**
+ * The transform that frames `ring` in the middle of the view, scaled so its
+ * bounding box fills the viewport bar `margin` px on the axis it hits first.
+ * Null when there is nothing sensible to frame.
+ *
+ * `viewport` is the visible panel, which is NOT the same as `fitted`: the SVG
+ * is sized to the fitted image and centred in a larger container with
+ * `overflow: hidden`, and the SVG itself is `overflow: visible`, so zoomed
+ * content fills the whole panel. Framing against `fitted` would leave the
+ * letterboxed bands empty and the quadrat smaller than asked for. Their
+ * centres coincide, so the centre in SVG coordinates is still `fitted / 2`
+ * (the same assumption `centreOn` makes).
+ */
+export function fitRingTransform(
+  ring: readonly Vec2[],
+  fitted: FittedSize,
+  viewport: FittedSize,
+  margin: number = FIT_MARGIN_PX
+): CanvasTransform | null {
+  if (ring.length < 3) return null;
+  if (fitted.width <= 0 || fitted.height <= 0) return null;
+  if (viewport.width <= 0 || viewport.height <= 0) return null;
+
+  const pts = ring.map((p) => toDisplay(p, fitted));
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const width = maxX - minX;
+  const height = maxY - minY;
+  // A ring with no area (all points collinear) has no aspect to match.
+  if (width <= 0 || height <= 0) return null;
+
+  const availableW = viewport.width - 2 * margin;
+  const availableH = viewport.height - 2 * margin;
+  // Too small to honour the margin at all: leave the view alone rather than
+  // invent a framing the caller did not ask for.
+  if (availableW <= 0 || availableH <= 0) return null;
+
+  // min() = the axis whose ratio binds first, which is the aspect comparison.
+  const raw = Math.min(availableW / width, availableH / height);
+  const k = Math.min(ZOOM_EXTENT[1], Math.max(ZOOM_EXTENT[0], raw));
+
+  return {
+    k,
+    x: fitted.width / 2 - k * ((minX + maxX) / 2),
+    y: fitted.height / 2 - k * ((minY + maxY) / 2),
+  };
+}
+
+/**
+ * A transform `t` of the way from `from` to `to`, for animating a move that
+ * changes zoom as well as position.
+ *
+ * Scale is interpolated GEOMETRICALLY — `k0 * (k1/k0)^t` — because zoom is
+ * perceived as a ratio: linear interpolation from 1x to 20x spends most of
+ * its frames already zoomed in, which reads as a lurch. Position is then
+ * derived by moving the point that ends up in the middle of the view along a
+ * straight line to that centre, so the quadrat stays framed for the whole
+ * animation rather than drifting and being caught at the end.
+ *
+ * When `from.k === to.k` this reduces exactly to a linear translate, which is
+ * what the sample-to-sample pan has always done.
+ */
+export function interpolateTransform(
+  from: CanvasTransform,
+  to: CanvasTransform,
+  centre: Vec2,
+  t: number
+): CanvasTransform {
+  const p = Math.min(1, Math.max(0, t));
+  // The pre-transform point that `to` puts in the middle of the view.
+  const focus = { x: (centre.x - to.x) / to.k, y: (centre.y - to.y) / to.k };
+  const k = from.k * Math.pow(to.k / from.k, p);
+  // Where that point sits on screen now, sliding to the centre.
+  const startX = from.x + from.k * focus.x;
+  const startY = from.y + from.k * focus.y;
+  return {
+    k,
+    x: startX + (centre.x - startX) * p - k * focus.x,
+    y: startY + (centre.y - startY) * p - k * focus.y,
+  };
+}

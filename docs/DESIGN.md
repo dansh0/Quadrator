@@ -231,6 +231,79 @@ zoomed behaviour is proven by `recentreTarget`'s unit tests plus a
 Playwright suite (`apps/web/e2e/recentre.spec.ts`); the component tests
 cover the zoom-1 case and the `cursorSource` wiring.
 
+### How far out the view can zoom
+
+`ZOOM_EXTENT`'s floor is **1**, which is the *fill* state rather than an
+arbitrary magnification. The SVG is sized to the image fitted (contain)
+inside the panel, so at k = 1 one pair of the image's edges meets the panel's
+by construction — `fitContain` always fills exactly one axis. Below that the
+image would sit with background margins on both axes at once, shrinking into
+the middle of the panel: less substrate on screen, and smaller to score.
+Because `fitted` is recomputed from the panel on every resize, the floor
+tracks the window instead of pinning a fixed scale.
+
+The floor deliberately sits further out than the quadrat framing, so zooming
+out from a framed quadrat reveals the rest of the image rather than stopping
+at the boundary plus its margin.
+
+One consequence for `fitRingTransform`: a quadrat spanning the whole image
+would need a scale below 1 to clear its 30px margin, and is clamped to 1
+instead. Filling the panel wins — there is nothing past the image edge worth
+showing to buy that gap.
+
+**Known gap:** the floor constrains zoom, not pan. Dragging at the floor can
+still push the image into a corner and expose background on both axes, which
+`translateExtent` on the zoom behaviour would close. That is left open
+deliberately: it would also stop overscroll at every other zoom level and
+lock panning entirely at the floor, which is a separate call from where the
+zoom floor sits.
+
+### Framing a committed quadrat
+
+The moment a boundary is committed, the view glides so the quadrat fills the
+canvas with a 30px margin on whichever axis binds first — the usual
+aspect-ratio comparison, in `fitRingTransform`. Scoring then starts zoomed to
+the thing being scored rather than at whole-image scale.
+
+This is **one-time, on the transition into `geoDefined`** for the quadrat
+being drawn. It is not re-run on resize, on re-entering a quadrat, or on any
+later render. A view that re-frames itself out from under the user is the
+opposite of helpful, so the trigger compares the watcher's previous values
+and fires only on that one edge; drawing a *fresh* boundary is a new
+definition and frames again.
+
+Two details the math has to get right:
+
+- **The viewport is the panel, not the fitted image.** The SVG is sized to
+  the fitted image and centred in a larger container that clips, while the
+  SVG itself is `overflow: visible`, so zoomed content fills the whole panel.
+  Framing against the fitted box would leave the letterboxed bands empty and
+  the quadrat smaller than asked for. Their centres coincide, so the centre in
+  SVG coordinates is still `fitted / 2` — the same assumption `centreOn`
+  makes.
+- **Scale interpolates geometrically**, `k0 * (k1/k0)^t`, because zoom is
+  perceived as a ratio: interpolating 1x to 20x linearly spends most of its
+  frames already zoomed in and reads as a lurch. Position is derived by
+  sliding the point that ends up centred along a straight line to the centre,
+  so the quadrat stays framed throughout instead of drifting and being caught
+  at the end. When `k` does not change this reduces exactly to the linear
+  translate the sample-to-sample pan has always used, which is why `panTo`
+  could be generalised rather than duplicated.
+
+Duration is a flat `FIT_DURATION_MS` rather than distance-scaled: it fires
+once per quadrat as an orientation cue, so a consistent motion reads better
+than one whose speed depends on how far the view happened to travel.
+
+The framing animates regardless of the recentre preference, which exists to
+govern the *repetitive* sample-to-sample pans during tagging — hundreds a
+session, a different exposure entirely from one glide per quadrat.
+`prefers-reduced-motion` is an explicit OS-level request, so that is honoured
+and the view cuts instead.
+
+`fitRingTransform` clamps to `ZOOM_EXTENT`, which is now shared with the
+`d3-zoom` behaviour: asking for a scale d3 would silently clamp would leave
+the animation's last frame disagreeing with d3's internal state.
+
 ### Selecting things on the canvas
 
 Overlay marks are small — a sample point is a 7px dot — so hitting one
@@ -420,6 +493,17 @@ built yet.
 | 3 | `apps/web`: browser adapter, static hosting, Playwright E2E suite | **Done** (July 2026) — see "Phase 3 close-out" below |
 | 4 | Cloud sync (provider-agnostic), shared species libraries, multi-device sessions | Planned — architecture decided in [`CLOUD.md`](CLOUD.md), nothing built |
 
+**To do — species buttons** (plan: [`SPECIES_EDITOR.md`](SPECIES_EDITOR.md)):
+
+- [ ] **S1 — Reassignable hotkeys.** Optional `hotkey` CSV column,
+  pure `resolveHotkeys` in core (explicit keys, then today's positional
+  layout as the fallback), "Edit hotkeys" bind mode on the Species tab
+  with swap + undo.
+- [ ] **S2 — In-app species editor.** Spreadsheet-like grid in a
+  Settings dialog (keyboard cell navigation, paste from a spreadsheet,
+  colour and hotkey cells), draft/validate/save, CSV import/export kept
+  for offline team sharing, confirmation before orphaning tagged codes.
+
 ### Phase 2 close-out (shipped July 2026)
 
 1. **Packaging** — `apps/desktop` is packaged by electron-builder
@@ -470,7 +554,14 @@ a thin entry and an E2E suite:
    adapter detects fallback capabilities at construction). Covers the
    golden path (draw → tag → export with an exact CSV assertion),
    QA-table/hotkey behavior, session save→reload→relink round-trip, and
-   the autosave "Continue Last Session" recovery. Menu actions live on
+   the autosave "Continue Last Session" recovery.
+4. **Hosting** (added September 2026) — Cloudflare Workers static assets,
+   no Worker script (`apps/web/wrangler.jsonc`). CI's `deploy-web` job
+   deploys main after lint/typecheck/unit/E2E pass, using a token held
+   by the `production` GitHub environment. `apps/web/public/_headers`
+   sets a strict CSP (`'self'` plus `blob:`/`data:` images and inline
+   styles for Vuetify), so the page can't send data anywhere even if
+   script were injected; hashed `assets/` are cached immutable. Menu actions live on
    the Image Prep tab, so download flows switch to `tab-prep` first.
 
 Legacy components deliberately **not** ported (dead code, never

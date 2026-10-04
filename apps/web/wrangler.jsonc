@@ -1,0 +1,15 @@
+// Cloudflare Workers static-assets deployment for the web app (Phase 1:
+// client-only, no Worker script, no bindings). Deployed by the `deploy-web`
+// job in .github/workflows/node.js.yml; `pnpm deploy:dry` validates locally.
+// Response headers (CSP etc.) live in public/_headers, which Vite copies
+// into dist/ and Workers applies without serving it.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quadrator",
+  "compatibility_date": "2026-09-20",
+  "assets": {
+    "directory": "./dist"
+  },
+  // Static assets only: disable the *.workers.dev preview URLs per version.
+  "preview_urls": false
+}

@@ -54,6 +54,11 @@ Other commands:
   System Access pickers on Chromium, `<input type=file>` on Firefox).
   Note `pnpm dev:ui` is a different thing: the UI harness on the
   in-memory adapter, whose file pickers are inert no-ops.
+- `pnpm --filter @quadrator/web deploy:dry` — build and validate the
+  Cloudflare deployment (`apps/web/wrangler.jsonc`) without uploading;
+  `preview:cf` serves the build on Cloudflare's local runtime, which
+  applies `apps/web/public/_headers` (the CSP) — `pnpm preview` does not.
+  Real deploys happen only in CI (`deploy-web` job, pushes to main).
 - `pnpm --filter @quadrator/web e2e` — Playwright E2E. Its `webServer`
   runs `pnpm build && pnpm preview` on port 4173; needs a Chromium
   browser (`pnpm --filter @quadrator/web exec playwright install

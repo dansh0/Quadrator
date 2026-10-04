@@ -12,6 +12,7 @@ export default tseslint.config(
       '**/dist/**',
       'apps/desktop/release/**',
       'apps/desktop/renderer/**',
+      'apps/web/.wrangler/**',
       'coverage/**',
       'tests/fixtures/**',
     ],

@@ -44,3 +44,4 @@ Installers
 /apps/web/dist
 /apps/web/playwright-report
 /apps/web/test-results
+/apps/web/.wrangler

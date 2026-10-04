@@ -77,7 +77,7 @@ onUnmounted(() => {
        fills the left side and the tab panel is a fixed-width right column
        that only appears once a quadrat exists. -->
   <v-app>
-    <v-main class="fill-height">
+    <v-main class="shell-main">
       <v-container fluid class="fill-height pa-1">
         <v-row class="fill-height shell-row" align="stretch" no-gutters>
           <v-col class="fill-height canvas-col">
@@ -176,6 +176,15 @@ body {
    is the "right panel vanished and won't come back" bug. */
 .shell-row {
   flex-wrap: nowrap;
+}
+
+/* A definite height for the whole fill-height chain below. v-app only sets a
+   min-height, so `fill-height` (height: 100%) on v-main resolved to auto and
+   the shell grew with its content; since the page never scrolls, anything
+   past the window bottom (e.g. the Data Review export button) was clipped
+   instead of reaching RightPanel's scrolling tab area. */
+.shell-main {
+  height: 100dvh;
 }
 
 /* `nowrap` alone is not enough: the canvas column's automatic minimum size is

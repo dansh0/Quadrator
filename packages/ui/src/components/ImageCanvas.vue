@@ -33,7 +33,11 @@ import {
   crosshairArms,
   easeInOutCubic,
   panDuration,
+  FIT_DURATION_MS,
+  ZOOM_EXTENT,
   fitContain,
+  fitRingTransform,
+  interpolateTransform,
   imageSizerKey,
   naturalImageSize,
   nearFirstNode,
@@ -325,7 +329,7 @@ let resizeObserver: ResizeObserver | null = null;
 onMounted(() => {
   const svg = svgEl.value!;
   zoomBehavior = d3zoom<SVGSVGElement, unknown>()
-    .scaleExtent([0.01, 100])
+    .scaleExtent([ZOOM_EXTENT[0], ZOOM_EXTENT[1]])
     // legacy rule: the view is only zoomable once the boundary is defined
     .filter((event: MouseEvent | WheelEvent) => geoDefined.value && !('button' in event && event.button))
     .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
@@ -391,22 +395,27 @@ function applyTransform(t: CanvasTransform): void {
  * Glide the view to `target`, easing in and out. Driving d3-zoom every frame
  * (rather than animating a separate transform) keeps a pan the user starts
  * mid-flight from jumping.
+ *
+ * `durationMs` overrides the distance-scaled default, which measures travel
+ * and so says nothing useful about a move that is mostly a change of zoom.
  */
-function panTo(target: CanvasTransform): void {
+function panTo(target: CanvasTransform, durationMs?: number): void {
   cancelPan();
   const start = { ...transform.value };
   const dx = target.x - start.x;
   const dy = target.y - start.y;
-  // Sub-pixel moves are not worth animating, or noticing.
-  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+  // Sub-pixel moves are not worth animating, or noticing — but a zoom that
+  // barely shifts the centre still is, so the scale has to be checked too.
+  const zoomed = Math.abs(target.k - start.k) > 1e-6;
+  if (!zoomed && Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
 
-  const duration = panDuration(Math.hypot(dx, dy));
+  const centre = { x: fitted.value.width / 2, y: fitted.value.height / 2 };
+  const duration = durationMs ?? panDuration(Math.hypot(dx, dy));
   let began: number | null = null;
   const step = (now: number): void => {
     began ??= now;
     const progress = Math.min(1, (now - began) / duration);
-    const eased = easeInOutCubic(progress);
-    applyTransform({ k: target.k, x: start.x + dx * eased, y: start.y + dy * eased });
+    applyTransform(interpolateTransform(start, target, centre, easeInOutCubic(progress)));
     panFrame = progress < 1 ? requestAnimationFrame(step) : null;
   };
   panFrame = requestAnimationFrame(step);
@@ -439,10 +448,35 @@ watch(
   }
 );
 
+/**
+ * Frame the quadrat the moment its boundary is committed, so scoring starts
+ * zoomed to the thing being scored instead of at whole-image scale.
+ *
+ * Strictly ONE-TIME, on the transition into `geoDefined` for the quadrat that
+ * was being drawn. It is deliberately not re-run on resize, on re-entering a
+ * quadrat, or on any later render: the framing is an opening move, and a view
+ * that re-frames itself out from under the user is the opposite of helpful.
+ *
+ * It animates regardless of the recentre preference, which governs the
+ * repetitive sample-to-sample pans during tagging — a different exposure
+ * entirely from one glide per quadrat. `prefers-reduced-motion` is an
+ * OS-level request from the user, so that one is honoured and cuts instead.
+ */
+function frameQuadrat(): void {
+  const ring = quadrat.value?.boundary;
+  if (ring === undefined) return;
+
+  const target = fitRingTransform(ring, fitted.value, containerSize);
+  if (target === null) return;
+
+  if (prefersReducedMotion()) applyTransform(target);
+  else panTo(target, FIT_DURATION_MS);
+}
+
 // Reset Nodes / quadrat switch: drop any in-progress drawing and re-center.
 watch(
-  () => [quadrat.value?.id, geoDefined.value, shape.value],
-  () => {
+  () => [quadrat.value?.id, geoDefined.value, shape.value] as const,
+  ([id, defined], [wasId, wasDefined]) => {
     // Switching shape mid-draw would mix rules (e.g. two square clicks left
     // over in quad mode), so the in-progress ring is dropped.
     drawnNodes.value = [];
@@ -450,6 +484,10 @@ watch(
     pointer.value = null;
     drawError.value = null;
     resetView();
+
+    // Same quadrat, boundary just committed — not a quadrat switch, and not
+    // a shape change (which cannot define a boundary).
+    if (id === wasId && defined && !wasDefined) frameQuadrat();
   }
 );
 </script>
