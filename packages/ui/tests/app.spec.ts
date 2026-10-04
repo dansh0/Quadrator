@@ -119,6 +119,33 @@ describe('App shell (Vue 3 + Vuetify 3 + Pinia + core wiring)', () => {
     expect(settings['lastSessionText']).toBeNull();
   });
 
+  it('hides session files where image ids do not survive a reload (web)', async () => {
+    // A snapshot left by an earlier build must not resurface either.
+    const platform = new InMemoryPlatformAdapter({ persistentFileIds: false });
+    await platform.saveSettings({ lastSessionText: '{"schemaVersion": 2}' });
+    platform.queueImagePick([{ id: 'web:1', name: 'reef-1.jpg' }]);
+
+    const wrapper = mountApp(platform);
+    await flush();
+    expect(wrapper.find('[data-test="home-load-images"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="home-open-session"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="home-continue-last"]').exists()).toBe(false);
+
+    // no autosave either: nothing could offer the snapshot back
+    await wrapper.find('[data-test="home-load-images"]').trigger('click');
+    await flush();
+    expect(useSessionStore().quadratCount).toBe(1);
+    const settings = (await platform.loadSettings()) as Record<string, unknown>;
+    expect(settings['lastSessionText']).toBe('{"schemaVersion": 2}');
+
+    // Ctrl+S saves nothing (earlier tests' apps still listen on window, so
+    // defaultPrevented can't be asserted here)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
+    await flush();
+    expect(platform.savedSessions).toHaveLength(0);
+    wrapper.unmount();
+  });
+
   it('shows the release version on the home screen', () => {
     const wrapper = mountApp();
     expect(wrapper.find('[data-test="home-screen"]').text()).toMatch(/Beta Release v\d+\.\d+/);

@@ -11,5 +11,13 @@
     "directory": "./dist"
   },
   // Static assets only: disable the *.workers.dev preview URLs per version.
-  "preview_urls": false
+  "preview_urls": false,
+  // Production hostnames. Declared here rather than in the dashboard so every
+  // deploy re-asserts them. Each needs the hostname free of other DNS records
+  // in the quadrator.app zone (Cloudflare creates its own on first deploy).
+  // quadrator.danshores.workers.dev keeps serving too (workers_dev default).
+  "routes": [
+    { "pattern": "quadrator.app", "custom_domain": true },
+    { "pattern": "www.quadrator.app", "custom_domain": true }
+  ]
 }

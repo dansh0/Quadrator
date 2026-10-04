@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { exportSessionCsv } from '../export.ts';
+import { sessionFilesEnabled } from '../features.ts';
 import { usePlatform } from '../platform.ts';
 import { useSessionStore } from '../stores/session.ts';
 import { useSpeciesStore } from '../stores/species.ts';
@@ -83,16 +84,18 @@ function runConfirmed(): void {
   confirm.value = null;
 }
 
-const buttons = [
+// `session: true` buttons are held back where session files are (features.ts).
+const allButtons = [
   { text: 'Load Image', tooltip: 'Load one or multiple images to add to this image group', fn: onLoadImages },
   { text: 'Reset Nodes', tooltip: 'Reset boundary polygon definition and data nodes for this quadrat', fn: onResetNodes },
   { text: 'Start Over', tooltip: 'Delete all unsaved data and restart', fn: onStartOver },
-  { text: 'Save Session', tooltip: 'Save the current session to a file', fn: onSaveSession },
-  { text: 'Load Session', tooltip: 'Load a previously saved session from a file', fn: onLoadSession },
+  { text: 'Save Session', tooltip: 'Save the current session to a file', fn: onSaveSession, session: true },
+  { text: 'Load Session', tooltip: 'Load a previously saved session from a file', fn: onLoadSession, session: true },
   { text: 'Export Data', tooltip: 'Save all entered data for all loaded quadrats as a CSV file', fn: onExport },
   { text: 'Prev. Image', tooltip: 'Move back to the previous image to analyze', fn: () => session.stepQuadrat(-1) },
   { text: 'Next Image', tooltip: 'Move forward to the next image to analyze', fn: () => session.stepQuadrat(1) },
 ];
+const buttons = sessionFilesEnabled(platform) ? allButtons : allButtons.filter((b) => !b.session);
 </script>
 
 <template>

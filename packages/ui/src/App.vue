@@ -5,6 +5,7 @@ import logoUrl from './assets/QUADRATOR_LOGO_white_text_transparent.png';
 import homeBgUrl from './assets/pexels-pok-rie-33563-1031200.jpg';
 import { createAutosaver } from './autosave.ts';
 import ImageCanvas from './components/ImageCanvas.vue';
+import { sessionFilesEnabled } from './features.ts';
 import RightPanel from './components/RightPanel.vue';
 import { usePlatform } from './platform.ts';
 import { useSessionStore } from './stores/session.ts';
@@ -15,6 +16,9 @@ const platform = usePlatform();
 const store = useSessionStore();
 const species = useSpeciesStore();
 const tagging = useTaggingStore();
+
+/** Held back on the web until images survive a reload (features.ts). */
+const sessionFiles = sessionFilesEnabled(platform);
 
 const hasAutosave = ref(false);
 const homeError = ref<string | null>(null);
@@ -42,13 +46,14 @@ async function onContinueLast(): Promise<void> {
 
 // Crash recovery: throttled snapshot of the session into the settings
 // document whenever the store changes (legacy auto-save to localStorage).
+// Off with session files: nothing could offer the snapshot back.
 const autosaver = createAutosaver(() => void store.autosave(platform));
 store.$subscribe(() => {
-  if (store.quadratCount > 0) autosaver.notify();
+  if (sessionFiles && store.quadratCount > 0) autosaver.notify();
 });
 
 function onKeydown(event: KeyboardEvent): void {
-  if (event.ctrlKey && event.key === 's') {
+  if (sessionFiles && event.ctrlKey && event.key === 's') {
     event.preventDefault();
     void store.save(platform);
   }
@@ -64,7 +69,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown);
   void species.init(platform);
   void tagging.init(platform);
-  void store.hasAutosaved(platform).then((v) => (hasAutosave.value = v));
+  if (sessionFiles) void store.hasAutosaved(platform).then((v) => (hasAutosave.value = v));
 });
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
@@ -114,6 +119,7 @@ onUnmounted(() => {
                       Continue Last Session
                     </v-btn>
                     <v-btn
+                      v-if="sessionFiles"
                       color="primary"
                       size="large"
                       prepend-icon="mdi-folder-open"

@@ -45,3 +45,6 @@ Installers
 /apps/web/playwright-report
 /apps/web/test-results
 /apps/web/.wrangler
+
+# Temp docs files
+docs/SPECIES_EDITOR.md

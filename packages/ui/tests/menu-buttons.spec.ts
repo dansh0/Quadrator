@@ -101,4 +101,15 @@ describe('MenuButtons destructive-action guards', () => {
     expect(tagging.activeTab).toBe('prep');
     expect(await session.hasAutosaved(platform)).toBe(false);
   });
+
+  it('hides Save/Load Session where image ids do not survive a reload (web)', () => {
+    const { wrapper } = mountWithShell(
+      MenuButtons,
+      new InMemoryPlatformAdapter({ persistentFileIds: false })
+    );
+    expect(wrapper.find('[data-test="menu-save-session"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="menu-load-session"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="menu-export-data"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="menu-start-over"]').exists()).toBe(true);
+  });
 });

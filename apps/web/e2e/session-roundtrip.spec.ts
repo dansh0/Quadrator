@@ -3,6 +3,11 @@
  * ids die with the page) → load the session from the downloaded file →
  * tagging data intact, image recovered through the relink flow
  * (persistentFileIds: false).
+ *
+ * HELD BACK: session files are hidden on the web until images survive a
+ * reload (packages/ui/src/features.ts, DESIGN.md §3 "Held back on the web").
+ * The two round-trip tests are kept, skipped, to be switched back on with
+ * the feature; the first test pins that the entry points are hidden.
  */
 import { expect, test } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
@@ -16,7 +21,26 @@ import {
   pickFiles,
 } from './helpers.ts';
 
-test('save session → reload → load from file → relink image → data intact', async ({ page }, testInfo) => {
+test('session files are hidden on the web', async ({ page }) => {
+  await forceFallbackMode(page);
+  await page.goto('/');
+  await expect(page.getByTestId('home-load-images')).toBeVisible();
+  await expect(page.getByTestId('home-open-session')).toHaveCount(0);
+
+  await loadImageAndDrawQuad(page);
+  await page.getByTestId('tab-prep').click();
+  await expect(page.getByTestId('menu-export-data')).toBeVisible();
+  await expect(page.getByTestId('menu-save-session')).toHaveCount(0);
+  await expect(page.getByTestId('menu-load-session')).toHaveCount(0);
+
+  // No autosave snapshot to offer after a reload.
+  await page.waitForTimeout(5_500);
+  await page.reload();
+  await expect(page.getByTestId('home-load-images')).toBeVisible();
+  await expect(page.getByTestId('home-continue-last')).toHaveCount(0);
+});
+
+test.skip('save session → reload → load from file → relink image → data intact', async ({ page }, testInfo) => {
   await forceFallbackMode(page);
   await page.goto('/');
   await loadImageAndDrawQuad(page);
@@ -55,7 +79,7 @@ test('save session → reload → load from file → relink image → data intac
   await expect(rows.nth(0)).toContainText('ALG');
 });
 
-test('autosave snapshot offers Continue Last Session after a reload', async ({ page }) => {
+test.skip('autosave snapshot offers Continue Last Session after a reload', async ({ page }) => {
   await forceFallbackMode(page);
   await page.goto('/');
   await loadImageAndDrawQuad(page);

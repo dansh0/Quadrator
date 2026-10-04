@@ -446,6 +446,30 @@ clipboard accelerators (Cmd+C/V/A) come from the Edit menu role, so a mac
 build would need a minimal `[{role:'appMenu'},{role:'editMenu'}]` instead
 of `null`.
 
+### Held back on the web
+
+The web build is client-only: images are opened from disk into the tab and
+nothing is stored server-side. Features that depend on reopening work later
+are therefore hidden there until the full web app (Phase 4) can back them.
+Gates live in `packages/ui/src/features.ts`, one function per feature,
+keyed on adapter capabilities rather than "is this the web" — so a future
+adapter that meets the requirement gets the feature back automatically.
+Desktop is unaffected.
+
+| Hidden on web | Gate | Why | Returns when |
+|---|---|---|---|
+| Save Session, Load Session (menu), Load from File and Continue Last Session (home), Ctrl+S, and the crash-recovery autosave behind Continue | `sessionFilesEnabled` = `capabilities.persistentFileIds` | Web image ids die with the tab, so every reopened session needs each image relinked by hand | Images persist across reloads: Phase 4 cloud storage ([`CLOUD.md`](CLOUD.md)), or stored File System Access handles on Chromium |
+
+The machinery stays wired and unit-tested on the in-memory adapter; only the
+entry points are hidden. To restore a feature: change its gate, then
+un-skip the dormant E2E tests (`test.skip` in
+`apps/web/e2e/session-roundtrip.spec.ts`) and drop the "hidden on the web"
+test there.
+
+Consequence to keep in mind: with no save and no autosave, **a reload or
+closed tab on the web loses the session**. The CSV export is the only way
+to keep results, so export before leaving the page.
+
 ### Brand assets and app icons
 
 The brand artwork lives in `packages/ui/src/assets/`, which is the single
@@ -492,6 +516,10 @@ built yet.
 | 2 | `packages/ui` (Vue 3/Vuetify 3/Pinia) + `apps/desktop` (current Electron, context isolation, PlatformAdapter); legacy `src/` retired at cutover; pnpm migration; ESLint flat config with TS support | **Done** (July 2026) — see "Phase 2 close-out" below for what shipped at cutover |
 | 3 | `apps/web`: browser adapter, static hosting, Playwright E2E suite | **Done** (July 2026) — see "Phase 3 close-out" below |
 | 4 | Cloud sync (provider-agnostic), shared species libraries, multi-device sessions | Planned — architecture decided in [`CLOUD.md`](CLOUD.md), nothing built |
+
+**To do — web app:** restore session files on the web (Save/Load
+Session, Continue Last Session) once images persist across reloads — see
+"Held back on the web" (§3) for the gate and the dormant E2E tests.
 
 **To do — species buttons** (plan: [`SPECIES_EDITOR.md`](SPECIES_EDITOR.md)):
 
@@ -561,8 +589,12 @@ a thin entry and an E2E suite:
    by the `production` GitHub environment. `apps/web/public/_headers`
    sets a strict CSP (`'self'` plus `blob:`/`data:` images and inline
    styles for Vuetify), so the page can't send data anywhere even if
-   script were injected; hashed `assets/` are cached immutable. Menu actions live on
-   the Image Prep tab, so download flows switch to `tab-prep` first.
+   script were injected; hashed `assets/` are cached immutable. Served
+   at `quadrator.app` and `www.quadrator.app` (custom domains declared as
+   `routes` in `wrangler.jsonc`, zone on Cloudflare DNS) and at
+   `quadrator.danshores.workers.dev`. Menu actions live on
+   the Image Prep tab, so download flows switch to `tab-prep` first. Session
+   files are hidden on the web — see "Held back on the web" (§3).
 
 Legacy components deliberately **not** ported (dead code, never
 mounted): `ZoomPanel.vue`, `TopBar.vue`, `HelloWorld.vue`. Deviations
