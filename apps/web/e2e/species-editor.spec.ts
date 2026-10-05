@@ -158,3 +158,79 @@ test('Escape closes the editor, asking first when there are unsaved changes', as
   await expect(cell(page, 0, 'species')).toHaveValue('Algae');
 });
 
+
+test('undo and redo in the editor: a typed word is one step', async ({ page }) => {
+  await loadImageAndDrawQuad(page);
+  await loadSpeciesButtons(page);
+  await page.getByTestId('edit-species').click();
+
+  await cell(page, 0, 'species').click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' green');
+  await cell(page, 1, 'hotkey').click();
+  await page.keyboard.press('z');
+  await page.getByTestId('row-menu-1').click();
+  await page.getByTestId('row-delete').click();
+  await expect(page.getByTestId('grid-row-1')).toHaveCount(0);
+
+  await cell(page, 0, 'species').click();
+  await page.keyboard.press('ControlOrMeta+z'); // the delete
+  await expect(cell(page, 1, 'code')).toHaveValue('COR');
+  await expect(cell(page, 1, 'hotkey')).toHaveText('z');
+  await page.keyboard.press('ControlOrMeta+z'); // the hotkey
+  await expect(cell(page, 1, 'hotkey')).toHaveText('auto · w');
+  await page.keyboard.press('ControlOrMeta+z'); // the whole word
+  await expect(cell(page, 0, 'species')).toHaveValue('Algae_sp');
+  await expect(page.getByTestId('editor-undo')).toBeDisabled();
+
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(cell(page, 0, 'species')).toHaveValue('Algae_sp green');
+  await page.getByTestId('editor-redo').click();
+  await expect(cell(page, 1, 'hotkey')).toHaveText('z');
+});
+
+test('group cells: click lists the column\'s other groups; type, arrow and pick', async ({ page }) => {
+  await loadImageAndDrawQuad(page);
+  await loadSpeciesButtons(page);
+  await page.getByTestId('edit-species').click();
+  const options = page.locator('[data-test^="combo-option-"]');
+
+  // A filled cell (ALG: 'Plant') still lists every other group in the column.
+  await cell(page, 0, 'group1').click();
+  await expect(options).toHaveText(['Animal']);
+  await options.first().click(); // mouse pick
+  await expect(cell(page, 0, 'group1')).toHaveValue('Animal');
+  await expect(cell(page, 0, 'group1')).toBeFocused();
+
+  // A new group is typed; then the other row offers it.
+  await cell(page, 0, 'group2').fill('Reef flat');
+  await cell(page, 1, 'group2').click();
+  await expect(options).toHaveText(['Reef flat']);
+  await page.keyboard.press('Escape'); // closes the list, not the dialog
+  await expect(cell(page, 1, 'group2')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('species-editor')).toBeVisible();
+
+  // Keyboard: type to filter, Down to highlight, Enter to pick.
+  await cell(page, 1, 'group2').fill('');
+  await cell(page, 1, 'group2').pressSequentially('re');
+  await expect(options).toHaveText(['Reef flat']);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(cell(page, 1, 'group2')).toHaveValue('Reef flat');
+  await expect(cell(page, 1, 'group2')).toBeFocused();
+});
+
+test('colour cells offer the column\'s colours with swatches', async ({ page }) => {
+  await loadImageAndDrawQuad(page);
+  await loadSpeciesButtons(page);
+  await page.getByTestId('edit-species').click();
+  const options = page.locator('[data-test^="combo-option-"]');
+
+  await cell(page, 0, 'color').click(); // ALG: #00aa00
+  await expect(options).toHaveText(['#aa0000']);
+  await expect(options.first().locator('.option-swatch')).toHaveCSS('background-color', 'rgb(170, 0, 0)');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(cell(page, 0, 'color')).toHaveValue('#aa0000');
+  await expect(page.getByTestId('swatch-0-color')).toHaveCSS('background-color', 'rgb(170, 0, 0)');
+});

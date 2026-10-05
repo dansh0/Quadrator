@@ -366,6 +366,22 @@ through `serializeSpeciesCsv`, so what is exported is exactly what is used.
   rules in `packages/ui/src/species-grid.ts`). Save is the only write.
   Esc closes it like Cancel (asking if there are unsaved changes); in a
   cell edited since it was focused, the first Esc restores the cell.
+  Group 1, Group 2 and both colour cells are comboboxes over the values
+  the column's other rows use: type a new one, or pick one. Colour
+  choices show a swatch beside the code, keep first-appearance order and
+  are matched case-insensitively; groups are sorted by name. (The swatch
+  button beside a colour cell still opens a full colour picker.) A click or Alt+Down lists
+  them all (a native `<datalist>` was tried and dropped: browsers filter
+  it by the cell's current text, so a filled cell offered only itself);
+  typing filters; Up/Down/Enter choose while the list is open, Esc closes
+  it. With the list closed the cell moves like any other. Focus never
+  leaves the input — the list is a `v-menu` positioned with `target`, not
+  `activator`, which would take over the arrow keys.
+  Undo/redo (title-bar buttons, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y)
+  covers every change to the draft for as long as the dialog is open:
+  typing in one cell is one step, everything else (paste, row actions,
+  hotkeys, an import) is its own. It replaces the browser's per-input
+  undo, which can't see grid-level changes (`packages/ui/src/draft-history.ts`).
   Because tags are codes, Save checks the open session: renaming a tagged
   code offers to rename the tags (`renameCodes`, applied simultaneously
   so swaps work), and deleting one warns those samples will export as

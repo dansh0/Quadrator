@@ -6,7 +6,9 @@ import {
   applyPaste,
   autoSelectedColor,
   blankRow,
+  columnOptions,
   diffCodes,
+  filterOptions,
   fromDraft,
   isMultiCellPaste,
   mergeByCode,
@@ -170,3 +172,39 @@ describe('import + save diff', () => {
     expect(diffCodes(saved, rows)).toEqual({ renames: new Map(), deleted: ['A'] });
   });
 });
+
+describe('columnOptions', () => {
+  it('lists each distinct group once, sorted, ignoring blanks and edge spaces', () => {
+    const rows = toDraft([
+      entry('A', { group1: 'Animal', group2: 'Sessile' }),
+      entry('B', { group1: 'Algae ', group2: '' }),
+      entry('C', { group1: 'Animal', group2: 'Mobile' }),
+      entry('D', { group1: '  ' }),
+    ]);
+    expect(columnOptions(rows, 'group1')).toEqual(['Algae', 'Animal']);
+    expect(columnOptions(rows, 'group2')).toEqual(['Mobile', 'Sessile']);
+  });
+
+  it('lists colours lowercased, deduplicated, in the order they first appear', () => {
+    const rows = toDraft([
+      entry('A', { color: '#9C27B0' }),
+      entry('B', { color: '#00bcd4' }),
+      entry('C', { color: '#9c27b0 ' }),
+      entry('D', { color: '' }),
+      entry('E', { color: '#795548' }),
+    ]);
+    expect(columnOptions(rows, 'color')).toEqual(['#9c27b0', '#00bcd4', '#795548']);
+  });
+});
+
+describe('filterOptions', () => {
+  it('shows everything when opened by click, else options containing the text', () => {
+    const all = ['Algae', 'Animal', 'Mollusc'];
+    expect(filterOptions(all, null)).toEqual(all);
+    expect(filterOptions(all, '  ')).toEqual(all);
+    expect(filterOptions(all, 'AL')).toEqual(['Algae', 'Animal']);
+    expect(filterOptions(all, 'llu')).toEqual(['Mollusc']);
+    expect(filterOptions(all, 'x')).toEqual([]);
+  });
+});
+

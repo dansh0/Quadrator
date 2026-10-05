@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Spreadsheet-style species grid: always-editable cells, Tab/Enter/arrow
- * movement, multi-cell paste from a spreadsheet, colour swatches, a
+ * movement, multi-cell paste from a spreadsheet, group cells that suggest
+ * the groups already in use, colour swatches, a
  * press-a-key Hotkey column and draggable rows. The rules live in
  * species-grid.ts; this component wires them to inputs and focus.
  *
@@ -13,14 +14,21 @@
  * typing a species name must never tag the current sample.
  */
 import type { SpeciesField } from '@quadrator/core';
-import { nextTick, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
+import { historyShortcut } from '../../draft-history.ts';
 import { classifyCaptureKey } from '../../hotkey-capture.ts';
 import {
   type DraftRow,
   GRID_COLUMNS,
   type Move,
+  SUGGESTING_FIELDS,
+  type SuggestingField,
   applyPaste,
   autoSelectedColor,
+  asOption,
+  columnOptions,
+  filterOptions,
+  isColorField,
   blankRow,
   isMultiCellPaste,
   moveCell,
@@ -37,7 +45,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', rows: DraftRow[]): void;
+  /**
+   * New rows. `group` names the cell being typed into, so the editor's undo
+   * history can treat a run of keystrokes in one cell as one step.
+   */
+  (e: 'update:modelValue', rows: DraftRow[], group?: string): void;
+  /** Focus moved to another cell: the next edit starts a new undo step. */
+  (e: 'seal'): void;
 }>();
 
 const table = ref<HTMLTableElement | null>(null);
@@ -47,13 +61,132 @@ const keyMessage = ref<string | null>(null);
 let focusValue = '';
 let dragFrom: number | null = null;
 
-function update(rows: DraftRow[]): void {
-  emit('update:modelValue', rows);
+function update(rows: DraftRow[], group?: string): void {
+  emit('update:modelValue', rows, group);
 }
 
-function setCell(row: number, field: SpeciesField, value: string): void {
+/** `typing` groups the edit with others in the same cell (see emits). */
+function setCell(row: number, field: SpeciesField, value: string, typing = false): void {
+  const target = props.modelValue[row];
+  if (target === undefined || target[field] === value) return;
   const rows = props.modelValue.map((r, i) => (i === row ? { ...r, [field]: value } : r));
-  update(rows);
+  update(rows, typing ? `${target.id}:${field}` : undefined);
+}
+
+// ---- column combobox -----------------------------------------------------------
+//
+// Group and colour cells offer the values already used in their column: type
+// a new one, or pick from the list (colours with a swatch beside the code). One list serves the whole grid, anchored under the
+// cell it belongs to. Focus never leaves the input (options are chosen on
+// mousedown with the default prevented), so typing and the grid's keys work
+// as in any cell. Opened by a click or Alt+Down (all groups) and by typing
+// (groups containing the text); Up/Down move through it, Enter picks, Esc or
+// leaving the cell closes it.
+
+interface ComboState {
+  row: number;
+  field: SuggestingField;
+  /** What was typed to filter by; null = opened by click, show all. */
+  typed: string | null;
+  /** Highlighted option, -1 = none. */
+  active: number;
+}
+const combo = ref<ComboState | null>(null);
+const comboAnchor = ref<HTMLElement | null>(null);
+
+const isSuggesting = (field: string): field is SuggestingField =>
+  (SUGGESTING_FIELDS as readonly string[]).includes(field);
+
+const comboOptions = computed(() => {
+  const c = combo.value;
+  if (c === null) return [];
+  // Other rows' groups: the cell's own text (perhaps half-typed) is not a choice.
+  const others = props.modelValue.filter((_, i) => i !== c.row);
+  return filterOptions(columnOptions(others, c.field), c.typed);
+});
+const comboOpen = computed(() => combo.value !== null && comboOptions.value.length > 0);
+
+function openCombo(el: HTMLElement, row: number, field: SuggestingField, typed: string | null): void {
+  comboAnchor.value = el;
+  combo.value = { row, field, typed, active: -1 };
+  if (typed === null) {
+    // highlight the cell's current group so Enter keeps it
+    const current = asOption(field, props.modelValue[row]?.[field] ?? '');
+    combo.value.active = comboOptions.value.indexOf(current);
+  }
+}
+
+// keep the highlighted option in view in a long list
+watch(
+  () => combo.value?.active,
+  async (i) => {
+    if (i === undefined || i < 0) return;
+    await nextTick();
+    document.querySelector(`[data-test="combo-option-${i}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  }
+);
+
+function closeCombo(): void {
+  combo.value = null;
+}
+
+function pickOption(value: string): void {
+  const c = combo.value;
+  if (c === null) return;
+  setCell(c.row, c.field, value); // a pick is its own undo step
+  closeCombo();
+}
+
+function onComboClick(event: MouseEvent, row: number, field: SuggestingField): void {
+  if (combo.value?.row === row && combo.value.field === field) closeCombo();
+  else openCombo(event.currentTarget as HTMLElement, row, field, null);
+}
+
+function onComboInput(event: Event, row: number, field: SuggestingField): void {
+  const input = event.target as HTMLInputElement;
+  setCell(row, field, input.value, true);
+  openCombo(input, row, field, input.value);
+}
+
+/** Keys while a group cell has focus. True = handled, stop here. */
+function comboKeydown(event: KeyboardEvent, at: { row: number; col: number }, field: SuggestingField): boolean {
+  if (!comboOpen.value) {
+    if (event.key === 'ArrowDown' && event.altKey) {
+      event.preventDefault();
+      openCombo(event.target as HTMLElement, at.row, field, null);
+      return true;
+    }
+    return false;
+  }
+  const c = combo.value!;
+  const last = comboOptions.value.length - 1;
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault();
+      c.active = Math.min(c.active + 1, last);
+      return true;
+    case 'ArrowUp':
+      event.preventDefault();
+      c.active = Math.max(c.active - 1, -1);
+      return true;
+    case 'Enter':
+      if (c.active < 0) {
+        closeCombo();
+        return false; // nothing chosen: Enter moves down as usual
+      }
+      event.preventDefault();
+      pickOption(comboOptions.value[c.active]!);
+      return true;
+    case 'Escape':
+      event.stopPropagation(); // closes the list, not the cell or dialog
+      closeCombo();
+      return true;
+    case 'Tab':
+      closeCombo();
+      return false;
+    default:
+      return false;
+  }
 }
 
 function errorFor(row: DraftRow, field: string): string | undefined {
@@ -110,8 +243,11 @@ const ARROWS: Record<string, Move> = {
 
 function onKeydown(event: KeyboardEvent): void {
   const at = posOf(event.target);
-  if (at === null) return;
+  // Undo/redo belong to the editor, never to a cell (nor the hotkey capture).
+  if (at === null || historyShortcut(event) !== null) return;
   const field = GRID_COLUMNS[at.col]!.field;
+
+  if (isSuggesting(field) && comboKeydown(event, at, field)) return;
 
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -141,7 +277,7 @@ function onKeydown(event: KeyboardEvent): void {
   // with nothing to restore it goes on to close the dialog.
   if (event.key === 'Escape' && input.value !== focusValue) {
     event.stopPropagation();
-    setCell(at.row, field, focusValue);
+    setCell(at.row, field, focusValue, true); // folds into the typing step
     return;
   }
   if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
@@ -160,10 +296,15 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
+function onFocusOut(event: FocusEvent): void {
+  if (combo.value !== null && event.target === comboAnchor.value) closeCombo();
+}
+
 function onFocusIn(event: FocusEvent): void {
   const t = event.target as HTMLInputElement | null;
   focusValue = t?.value ?? '';
   keyMessage.value = null;
+  emit('seal');
 }
 
 function onPaste(event: ClipboardEvent): void {
@@ -226,6 +367,7 @@ function addRow(): void {
       @keydown="onKeydown"
       @paste="onPaste"
       @focusin="onFocusIn"
+      @focusout="onFocusOut"
     >
       <thead>
         <tr>
@@ -288,11 +430,12 @@ function addRow(): void {
                     aria-label="Pick colour"
                   />
                 </template>
+                <!-- a drag is one undo step: opening the swatch sealed the last -->
                 <v-color-picker
                   :model-value="swatch(row, col.field) || '#888888'"
                   mode="hex"
                   :modes="['hex']"
-                  @update:model-value="(v: unknown) => setCell(r, col.field, String(v).toLowerCase())"
+                  @update:model-value="(v: unknown) => setCell(r, col.field, String(v).toLowerCase(), true)"
                 />
               </v-menu>
               <input
@@ -303,10 +446,32 @@ function addRow(): void {
                 :data-col="c"
                 :data-test="`cell-${r}-${col.field}`"
                 :aria-label="`${col.label}, row ${r + 1}`"
+                role="combobox"
+                aria-autocomplete="list"
+                :aria-expanded="comboOpen && combo?.row === r && combo?.field === col.field"
+                autocomplete="off"
                 spellcheck="false"
-                @input="setCell(r, col.field, ($event.target as HTMLInputElement).value)"
+                @click="onComboClick($event, r, col.field)"
+                @input="onComboInput($event, r, col.field)"
               />
             </div>
+
+            <input
+              v-else-if="isSuggesting(col.field)"
+              class="cell cell-group"
+              :value="row[col.field]"
+              :data-row="r"
+              :data-col="c"
+              :data-test="`cell-${r}-${col.field}`"
+              :aria-label="`${col.label}, row ${r + 1}`"
+              role="combobox"
+              aria-autocomplete="list"
+              :aria-expanded="comboOpen && combo?.row === r && combo?.field === col.field"
+              autocomplete="off"
+              spellcheck="false"
+              @click="onComboClick($event, r, col.field)"
+              @input="onComboInput($event, r, col.field)"
+            />
 
             <input
               v-else
@@ -317,7 +482,7 @@ function addRow(): void {
               :data-test="`cell-${r}-${col.field}`"
               :aria-label="`${col.label}, row ${r + 1}`"
               :spellcheck="col.field === 'species'"
-              @input="setCell(r, col.field, ($event.target as HTMLInputElement).value)"
+              @input="setCell(r, col.field, ($event.target as HTMLInputElement).value, true)"
             />
           </td>
 
@@ -352,6 +517,37 @@ function addRow(): void {
         </tr>
       </tbody>
     </table>
+
+    <!-- `target` only positions the list: with an activator, VMenu would
+         take over the arrow keys and focus. -->
+    <v-menu
+      :model-value="comboOpen"
+      :target="comboAnchor ?? undefined"
+      location="bottom start"
+      :open-on-click="false"
+      :close-on-content-click="false"
+      max-height="240"
+      @update:model-value="(v: boolean) => !v && closeCombo()"
+    >
+      <v-list density="compact" role="listbox" data-test="combo-options">
+        <v-list-item
+          v-for="(option, i) in comboOptions"
+          :key="option"
+          :title="option"
+          :active="i === combo?.active"
+          :class="{ 'combo-option--color': combo !== null && isColorField(combo.field) }"
+          role="option"
+          :aria-selected="i === combo?.active"
+          :data-test="`combo-option-${i}`"
+          @mousedown.prevent
+          @click="pickOption(option)"
+        >
+          <template v-if="combo !== null && isColorField(combo.field)" #prepend>
+            <span class="option-swatch" :style="{ background: option }" aria-hidden="true" />
+          </template>
+        </v-list-item>
+      </v-list>
+    </v-menu>
 
     <div class="d-flex align-center mt-2">
       <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" data-test="add-row" @click="addRow">
@@ -437,6 +633,19 @@ function addRow(): void {
 
 .cell-key--auto {
   color: rgba(var(--v-theme-on-surface), 0.5);
+}
+
+/* colour suggestions: a swatch beside the code, codes aligned */
+.option-swatch {
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.4);
+}
+
+.combo-option--color :deep(.v-list-item-title) {
+  font-family: monospace;
 }
 
 .color-cell {

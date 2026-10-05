@@ -10,7 +10,9 @@
  * those samples will export as UNKNOWN CODE.
  *
  * Esc closes like Cancel (a cell edited since it was focused is restored
- * first, see SpeciesGrid).
+ * first, see SpeciesGrid). Every change to the draft goes through `edit`,
+ * which records it for undo/redo (draft-history.ts); the history lasts as
+ * long as the dialog is open.
  */
 import templateCsv from '../../assets/buttons_template.csv?raw';
 import {
@@ -23,6 +25,7 @@ import {
 } from '@quadrator/core';
 import { computed, ref, watch } from 'vue';
 import { useDisplay } from 'vuetify';
+import { DraftHistory, historyShortcut } from '../../draft-history.ts';
 import { usePlatform } from '../../platform.ts';
 import {
   type DraftRow,
@@ -62,12 +65,55 @@ const prompt = ref<Prompt | null>(null);
 
 const snapshot = (r: readonly DraftRow[]) => JSON.stringify(fromDraft(r));
 
+// ---- undo / redo -----------------------------------------------------------------
+
+/** Rows exactly, ids and blank rows included — adding an empty row is a step. */
+const history = new DraftHistory<DraftRow[]>((a, b) => JSON.stringify(a) === JSON.stringify(b));
+/** Bumped on every history change; DraftHistory itself is not reactive. */
+const historyVersion = ref(0);
+const canUndo = computed(() => historyVersion.value >= 0 && history.canUndo);
+const canRedo = computed(() => historyVersion.value >= 0 && history.canRedo);
+
+/** The one way the draft changes, so every change can be undone. */
+function edit(next: DraftRow[], group?: string): void {
+  history.record(rows.value, group ?? null);
+  rows.value = next;
+  historyVersion.value++;
+}
+
+function sealTyping(): void {
+  history.seal();
+}
+
+function undo(): void {
+  const previous = history.undo(rows.value);
+  if (previous !== null) rows.value = previous;
+  historyVersion.value++;
+}
+
+function redo(): void {
+  const next = history.redo(rows.value);
+  if (next !== null) rows.value = next;
+  historyVersion.value++;
+}
+
+function onHistoryKey(event: KeyboardEvent): void {
+  const action = historyShortcut(event);
+  if (action === null || prompt.value !== null) return;
+  // Also stops the browser's own input undo, which knows nothing of the grid.
+  event.preventDefault();
+  if (action === 'undo') undo();
+  else redo();
+}
+
 watch(
   open,
   (isOpen) => {
     if (!isOpen) return;
     rows.value = species.entries.length > 0 ? toDraft(species.entries) : [blankRow()];
     initial.value = snapshot(rows.value);
+    history.clear();
+    historyVersion.value++;
     error.value = null;
     prompt.value = null;
   },
@@ -104,19 +150,19 @@ const onImport = () =>
     if (file === null) return;
     const incoming = parseSpeciesCsv(file.text); // problems show on the cells
     if (entries.value.length === 0) {
-      rows.value = toDraft(incoming, false);
+      edit(toDraft(incoming, false));
     } else {
       prompt.value = { kind: 'import', entries: incoming };
     }
   });
 
 function importReplace(incoming: SpeciesEntry[]): void {
-  rows.value = toDraft(incoming, false);
+  edit(toDraft(incoming, false));
   prompt.value = null;
 }
 
 function importMerge(incoming: SpeciesEntry[]): void {
-  rows.value = mergeByCode(rows.value, incoming);
+  edit(mergeByCode(rows.value, incoming));
   prompt.value = null;
 }
 
@@ -200,21 +246,57 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 <template>
   <v-dialog v-model="open" persistent scrollable :fullscreen="smAndDown" max-width="1100">
-    <v-card data-test="species-editor" @keydown.esc="onEscape">
+    <v-card data-test="species-editor" @keydown.esc="onEscape" @keydown="onHistoryKey">
       <v-card-title class="d-flex align-center">
         <v-icon start>mdi-cog</v-icon>
         Settings
         <span class="text-medium-emphasis ml-2">· Species</span>
+        <v-spacer />
+        <v-tooltip text="Undo (Ctrl+Z)" location="bottom">
+          <template #activator="{ props: tip }">
+            <v-btn
+              v-bind="tip"
+              icon="mdi-undo"
+              variant="text"
+              size="small"
+              :disabled="!canUndo"
+              aria-label="Undo"
+              data-test="editor-undo"
+              @click="undo"
+            />
+          </template>
+        </v-tooltip>
+        <v-tooltip text="Redo (Ctrl+Shift+Z)" location="bottom">
+          <template #activator="{ props: tip }">
+            <v-btn
+              v-bind="tip"
+              icon="mdi-redo"
+              variant="text"
+              size="small"
+              :disabled="!canRedo"
+              aria-label="Redo"
+              data-test="editor-redo"
+              @click="redo"
+            />
+          </template>
+        </v-tooltip>
       </v-card-title>
 
       <v-card-text>
         <p class="text-body-2 text-medium-emphasis mb-3">
           Type straight into the cells. Tab and Enter move between them, and you can paste a block
           copied from a spreadsheet. In the Hotkey column, press the key you want (Delete clears
-          it); species without one get the next free key automatically. Esc closes.
+          it); species without one get the next free key automatically. Ctrl+Z undoes, Esc
+          closes.
         </p>
 
-        <SpeciesGrid v-model="rows" :errors="errors" :resolved-keys="resolvedKeys" />
+        <SpeciesGrid
+          :model-value="rows"
+          :errors="errors"
+          :resolved-keys="resolvedKeys"
+          @update:model-value="edit"
+          @seal="sealTyping"
+        />
 
         <v-alert
           v-if="issues.length > 0"

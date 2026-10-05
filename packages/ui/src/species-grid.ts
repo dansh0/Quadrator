@@ -108,6 +108,52 @@ export function validateDraft(rows: readonly DraftRow[]): Map<string, string> {
   return errors;
 }
 
+// ---- column suggestions ----------------------------------------------------------
+
+/** Columns that suggest values already used in the same column. */
+export const SUGGESTING_FIELDS = ['group1', 'group2', 'color', 'colorSelected'] as const;
+export type SuggestingField = (typeof SUGGESTING_FIELDS)[number];
+
+export const isColorField = (field: string): field is 'color' | 'colorSelected' =>
+  field === 'color' || field === 'colorSelected';
+
+/**
+ * A cell value as a suggestion: trimmed, and for colours lowercased, so
+ * "Animal " and "Animal", or "#9C27B0" and "#9c27b0", are one choice.
+ */
+export function asOption(field: SuggestingField, value: string): string {
+  const v = value.trim();
+  return isColorField(field) ? v.toLowerCase() : v;
+}
+
+/**
+ * Every distinct non-blank value of `field` in `rows` — a column's dropdown
+ * choices. Groups are sorted by name; colours keep the order they first
+ * appear in the list, which follows how species are grouped (sorting hex
+ * codes would scatter them meaninglessly).
+ */
+export function columnOptions(rows: readonly DraftRow[], field: SuggestingField): string[] {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const v = asOption(field, r[field]);
+    if (v !== '') seen.add(v);
+  }
+  const values = [...seen];
+  return isColorField(field) ? values : values.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The choices to show: everything when the list was opened by click or
+ * Alt+Down (`typed` null), otherwise the options containing what was typed,
+ * case-insensitively. Unlike a native <datalist>, a filled cell opened by
+ * click still offers every other value in the column.
+ */
+export function filterOptions(options: readonly string[], typed: string | null): string[] {
+  const needle = typed?.trim().toLowerCase() ?? '';
+  if (needle === '') return [...options];
+  return options.filter((o) => o.toLowerCase().includes(needle));
+}
+
 // ---- cell movement ---------------------------------------------------------------
 
 export interface CellPos {
