@@ -62,7 +62,7 @@ clears it.
 | `sampling/` | `sampleRect` (stratified rows×cols within a quad), `samplePolygon` (n equal-area pieces via sequential `splitByArea`, one rejection-sampled point per piece), `mulberry32` seeded RNG. |
 | `model/` | Shared domain types (`Sample`, `SpeciesEntry`, `QuadratSettings`). |
 | `export/` | CSV row generation with escaping; stable column header. |
-| `species/` | RFC 4180-style CSV parsing for species-button definitions (browser-safe, no Node deps). |
+| `species/` | Species lists: RFC 4180-style CSV parsing and serializing (browser-safe, no Node deps), list validation, and hotkey resolution (`hotkeys.ts`). |
 | `serialization/` | zod schemas for session formats, migration, `parseSession`/`serializeSession`. |
 
 ### Session schema
@@ -332,6 +332,48 @@ reads at a glance whatever palette a survey uses. The emphasis stays
 outside the button: anything drawn inside it competes with the label at
 85×40.
 
+### Species list and hotkeys
+
+The species list is one format everywhere: the CSV `code, species, group1,
+group2, color, colorSelected, hotkey` (only `code` and `species` required;
+older files without `hotkey` load unchanged). The app persists the list as
+CSV text in the settings document, and every in-app change is written back
+through `serializeSpeciesCsv`, so what is exported is exactly what is used.
+
+- **Hotkeys** (`resolveHotkeys`, core): explicit keys first, then every
+  species without one takes the next free key of the legacy 24-key layout
+  in list order. A list with no explicit keys gets exactly the old
+  positional layout. Assignable keys are what an unshifted US keyboard
+  types in one press — letters, digits and `` ` - = [ ] \ ; ' , . / `` —
+  because tagging ignores Shift, so a shifted key could be set but never
+  pressed. Keys are matched on `KeyboardEvent.key` (the typed character,
+  so a layout's own letters work); characters outside that set are refused.
+- **Validation** (`validateSpecies`, core): code required, unique and
+  without edge spaces (codes are what samples store); species required;
+  colours blank, hex or a name; hotkeys assignable and unique. CSV import
+  and the editor's Save both refuse a list with any problem, naming the
+  row. A list persisted before these rules (e.g. duplicate codes) still
+  loads at startup — refusing it would empty the buttons mid-survey — and
+  the editor shows its problems; only a hotkey clash is not loaded, since
+  it would make a keypress ambiguous.
+- **Rebinding** (Species tab, "Edit Hotkeys"): tagging pauses, a click
+  arms a button (dashed ring), the next key binds. Taking another
+  species' key swaps the two; Delete clears back to automatic, which can
+  shift later automatic keys — the snackbar says so, with Undo. Esc (or
+  Done) leaves the mode, and so does opening the species editor.
+- **Editor** (Settings → Species, from the Species tab or the Image Prep
+  menu's "Species List"): a spreadsheet-style grid over a draft (pure
+  rules in `packages/ui/src/species-grid.ts`). Save is the only write.
+  Esc closes it like Cancel (asking if there are unsaved changes); in a
+  cell edited since it was focused, the first Esc restores the cell.
+  Because tags are codes, Save checks the open session: renaming a tagged
+  code offers to rename the tags (`renameCodes`, applied simultaneously
+  so swaps work), and deleting one warns those samples will export as
+  UNKNOWN CODE.
+- **Never tag while editing:** the tab's tagging listener ignores events
+  from text inputs and from anything inside a Vuetify overlay (dialogs,
+  menus), which covers the editor's non-input Hotkey cells.
+
 ### Drawing modes
 
 `quad` completes on the fourth click, `square` on the **second** (the
@@ -521,13 +563,14 @@ built yet.
 Session, Continue Last Session) once images persist across reloads — see
 "Held back on the web" (§3) for the gate and the dormant E2E tests.
 
-**To do — species buttons** (plan: [`SPECIES_EDITOR.md`](SPECIES_EDITOR.md)):
+**Species buttons** (plan and as-built notes: [`SPECIES_EDITOR.md`](SPECIES_EDITOR.md);
+behaviour: "Species list and hotkeys" in §3):
 
-- [ ] **S1 — Reassignable hotkeys.** Optional `hotkey` CSV column,
+- [x] **S1 — Reassignable hotkeys.** Optional `hotkey` CSV column,
   pure `resolveHotkeys` in core (explicit keys, then today's positional
   layout as the fallback), "Edit hotkeys" bind mode on the Species tab
   with swap + undo.
-- [ ] **S2 — In-app species editor.** Spreadsheet-like grid in a
+- [x] **S2 — In-app species editor.** Spreadsheet-like grid in a
   Settings dialog (keyboard cell navigation, paste from a spreadsheet,
   colour and hotkey cells), draft/validate/save, CSV import/export kept
   for offline team sharing, confirmation before orphaning tagged codes.

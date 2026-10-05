@@ -75,6 +75,16 @@ export const useSessionStore = defineStore('session', {
     hasNextQuadrat(): boolean {
       return this.currentIndex >= 0 && this.currentIndex < this.quadratCount - 1;
     },
+    /** How many samples carry each species code, across every quadrat. */
+    codeUsage(): Map<string, number> {
+      const usage = new Map<string, number>();
+      for (const q of this.session?.quadrats ?? []) {
+        for (const s of q.samples) {
+          for (const c of s.codes) usage.set(c, (usage.get(c) ?? 0) + 1);
+        }
+      }
+      return usage;
+    },
   },
 
   actions: {
@@ -243,6 +253,24 @@ export const useSessionStore = defineStore('session', {
       quadrat.rngSeed = null;
       quadrat.samples = [];
       this.dirty = true;
+    },
+
+    /**
+     * Rewrite species codes on every tagged sample: `renames` maps old code →
+     * new. Applied simultaneously, so swaps (A→B, B→A) work, and a sample
+     * never ends up holding the same code twice.
+     */
+    renameCodes(renames: ReadonlyMap<string, string>): void {
+      if (this.session === null || renames.size === 0) return;
+      let changed = false;
+      for (const q of this.session.quadrats) {
+        for (const s of q.samples) {
+          if (!s.codes.some((c) => renames.has(c))) continue;
+          s.codes = [...new Set(s.codes.map((c) => renames.get(c) ?? c))];
+          changed = true;
+        }
+      }
+      if (changed) this.dirty = true;
     },
 
     renameCurrentQuadrat(name: string): void {

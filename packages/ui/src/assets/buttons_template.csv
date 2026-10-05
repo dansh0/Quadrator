@@ -1,4 +1,4 @@
-code,species,group1,group2,color,colorSelected
+code,species,group1,group2,color,colorSelected,hotkey
 Anom,Anthopleura_sp,Animal,Intertidal sessile,#9c27b0,#7c1790
 Barn,Cirripedia_spp,Animal,Intertidal sessile,#9c27b0,#7c1791
 Asc,Polycarpa sp.,Animal,Intertidal sessile,#9c27b0,#7c1792
@@ -42,3 +42,4 @@ Bare,Bare space,Other,Other,#9e9e9e,#7e7e7e
 // group2 - Second optional group information - use empty cell to skip
 // color - The button color when not selected - recommended to use example colors above
 // colorSelected - The button color when selected - recommended to use example colors above
+// hotkey - Optional key that tags this species: a lowercase letter or digit or one of ` - = [ ] \ ; ' . / (blank = next free key automatically)

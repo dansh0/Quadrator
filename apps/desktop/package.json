@@ -1,6 +1,6 @@
 {
   "name": "@quadrator/desktop",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Quadrator desktop shell: Electron with context isolation; implements PlatformAdapter over typed IPC.",
   "author": "Shores Design",

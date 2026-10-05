@@ -12,6 +12,11 @@ export interface SpeciesEntry {
   group2: string;
   color: string;
   colorSelected: string;
+  /**
+   * Explicit tagging key, lowercase; '' = none, so the species takes the next
+   * free key from the default layout (species/hotkeys.ts).
+   */
+  hotkey: string;
 }
 
 /** One sample point within a quadrat. x/y are null until points are generated. */

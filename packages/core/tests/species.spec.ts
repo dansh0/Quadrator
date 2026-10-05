@@ -17,6 +17,7 @@ describe('parseSpeciesCsv', () => {
       group2: 'Intertidal sessile',
       color: '#9c27b0',
       colorSelected: '#7c1790',
+      hotkey: '',
     });
 
     // codes with special characters survive
@@ -58,6 +59,7 @@ describe('parseSpeciesCsv', () => {
       group2: '',
       color: '',
       colorSelected: '',
+      hotkey: '',
     });
   });
 
@@ -91,5 +93,10 @@ describe('parseSpeciesCsv', () => {
 
   it('rejects an unterminated quoted field', () => {
     expect(() => parseSpeciesCsv('code,species\nA,"broken\n')).toThrow(CsvParseError);
+  });
+
+  it('reads an optional hotkey column, trimmed and lowercased', () => {
+    const entries = parseSpeciesCsv('code,species,hotkey\nA,Alpha, Q \nB,Beta,\nC,Gamma,","\n');
+    expect(entries.map((e) => e.hotkey)).toEqual(['q', '', ',']);
   });
 });

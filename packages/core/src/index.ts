@@ -69,6 +69,20 @@ export {
 // export + species
 export { CSV_HEADER, type QuadratCsvInput, csvEscape, quadratCsvRows } from './export/csv.ts';
 export { CsvParseError, parseSpeciesCsv } from './species/parse.ts';
+export { SPECIES_CSV_COLUMNS, serializeSpeciesCsv } from './species/serialize.ts';
+export {
+  ASSIGNABLE_HOTKEYS,
+  DEFAULT_HOTKEYS,
+  HotkeyError,
+  SpeciesValidationError,
+  type SpeciesField,
+  type SpeciesIssue,
+  assertValidSpecies,
+  formatIssue,
+  hotkeyProblem,
+  resolveHotkeys,
+  validateSpecies,
+} from './species/hotkeys.ts';
 
 // platform
 export {

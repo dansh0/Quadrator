@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import MenuButtons from '../src/components/MenuButtons.vue';
 import { emptySession, useSessionStore } from '../src/stores/session.ts';
 import { useTaggingStore } from '../src/stores/tagging.ts';
-import { mountWithShell, seedSession, taggedQuadrat } from './helpers.ts';
+import { mountWithShell, seedSession, stubVisualViewport, taggedQuadrat } from './helpers.ts';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -28,18 +28,7 @@ function otherSessionJson(): string {
 }
 
 describe('MenuButtons destructive-action guards', () => {
-  beforeAll(() => {
-    // v-dialog's location strategy reads visualViewport; happy-dom has none
-    (window as unknown as Record<string, unknown>)['visualViewport'] = {
-      width: 1280,
-      height: 800,
-      offsetLeft: 0,
-      offsetTop: 0,
-      scale: 1,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    };
-  });
+  beforeAll(stubVisualViewport);
 
   afterEach(() => {
     document.body.innerHTML = '';
@@ -111,5 +100,13 @@ describe('MenuButtons destructive-action guards', () => {
     expect(wrapper.find('[data-test="menu-load-session"]').exists()).toBe(false);
     expect(wrapper.find('[data-test="menu-export-data"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="menu-start-over"]').exists()).toBe(true);
+  });
+
+  it('Species List opens the species editor', async () => {
+    const { wrapper } = mountWithShell(MenuButtons);
+    expect(overlay('[data-test="species-editor"]')).toBeNull();
+    await wrapper.find('[data-test="menu-species-list"]').trigger('click');
+    await flush();
+    expect(overlay('[data-test="species-editor"]')).not.toBeNull();
   });
 });

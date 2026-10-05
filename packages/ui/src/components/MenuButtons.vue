@@ -6,6 +6,7 @@ import { usePlatform } from '../platform.ts';
 import { useSessionStore } from '../stores/session.ts';
 import { useSpeciesStore } from '../stores/species.ts';
 import { useTaggingStore } from '../stores/tagging.ts';
+import SpeciesEditorDialog from './species/SpeciesEditorDialog.vue';
 
 const emit = defineEmits<{
   /** The canvas re-initializes boundary drawing for the current quadrat. */
@@ -20,6 +21,7 @@ const tagging = useTaggingStore();
 const error = ref<string | null>(null);
 const notice = ref<string | null>(null);
 const confirm = ref<{ question: string; action: () => void } | null>(null);
+const editorOpen = ref(false);
 
 async function guard(work: () => Promise<void>): Promise<void> {
   error.value = null;
@@ -92,6 +94,7 @@ const allButtons = [
   { text: 'Save Session', tooltip: 'Save the current session to a file', fn: onSaveSession, session: true },
   { text: 'Load Session', tooltip: 'Load a previously saved session from a file', fn: onLoadSession, session: true },
   { text: 'Export Data', tooltip: 'Save all entered data for all loaded quadrats as a CSV file', fn: onExport },
+  { text: 'Species List', tooltip: 'Create or edit the species buttons and their hotkeys', fn: () => (editorOpen.value = true) },
   { text: 'Prev. Image', tooltip: 'Move back to the previous image to analyze', fn: () => session.stepQuadrat(-1) },
   { text: 'Next Image', tooltip: 'Move forward to the next image to analyze', fn: () => session.stepQuadrat(1) },
 ];
@@ -135,6 +138,8 @@ const buttons = sessionFilesEnabled(platform) ? allButtons : allButtons.filter((
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <SpeciesEditorDialog v-model="editorOpen" />
   </v-container>
 </template>
 

@@ -478,4 +478,41 @@ describe('sampling settings', () => {
       geoDefined: false,
     });
   });
+
+  it('codeUsage counts tagged samples per code across every quadrat', () => {
+    const store = useSessionStore();
+    store.newSession(NOW);
+    const a = blankQuadrat('a');
+    a.samples = [
+      { index: 0, x: 0, y: 0, codes: ['Ulva', 'Barn'] },
+      { index: 1, x: 0, y: 0, codes: ['Ulva'] },
+    ];
+    const b = blankQuadrat('b');
+    b.samples = [{ index: 0, x: 0, y: 0, codes: ['Ulva'] }];
+    store.session!.quadrats.push(a, b);
+    expect(Object.fromEntries(store.codeUsage)).toEqual({ Ulva: 3, Barn: 1 });
+  });
+
+  it('renameCodes rewrites tags simultaneously (swaps work) without duplicating codes', () => {
+    const store = useSessionStore();
+    store.newSession(NOW);
+    const q = blankQuadrat('a');
+    q.samples = [
+      { index: 0, x: 0, y: 0, codes: ['A', 'B'] },
+      { index: 1, x: 0, y: 0, codes: ['A', 'C'] },
+      { index: 2, x: 0, y: 0, codes: ['D'] },
+    ];
+    store.session!.quadrats.push(q);
+
+    store.renameCodes(new Map([['A', 'B'], ['B', 'A']]));
+    expect(q.samples.map((s) => s.codes)).toEqual([['B', 'A'], ['B', 'C'], ['D']]);
+    expect(store.dirty).toBe(true);
+
+    store.renameCodes(new Map([['C', 'B']])); // merge into a code already there
+    expect(q.samples[1]!.codes).toEqual(['B']);
+
+    store.dirty = false;
+    store.renameCodes(new Map([['nope', 'X']]));
+    expect(store.dirty).toBe(false);
+  });
 });

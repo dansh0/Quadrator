@@ -3,9 +3,9 @@ import { CSV_HEADER, csvEscape, quadratCsvRows } from '../src/export/csv.ts';
 import { SpeciesEntry } from '../src/model/types.ts';
 
 const speciesList: SpeciesEntry[] = [
-  { code: 'Anom', species: 'Anthopleura_sp', group1: 'Animal', group2: 'Intertidal sessile', color: '', colorSelected: '' },
-  { code: 'Barn', species: 'Cirripedia_spp', group1: 'Animal', group2: 'Intertidal sessile', color: '', colorSelected: '' },
-  { code: 'Ulva', species: 'Ulva sp., green', group1: 'Algae', group2: 'Intertidal', color: '', colorSelected: '' },
+  { code: 'Anom', species: 'Anthopleura_sp', group1: 'Animal', group2: 'Intertidal sessile', color: '', colorSelected: '', hotkey: '' },
+  { code: 'Barn', species: 'Cirripedia_spp', group1: 'Animal', group2: 'Intertidal sessile', color: '', colorSelected: '', hotkey: '' },
+  { code: 'Ulva', species: 'Ulva sp., green', group1: 'Algae', group2: 'Intertidal', color: '', colorSelected: '', hotkey: '' },
 ];
 
 // Minimal RFC4180 line parser for assertions (same as legacy test helper).
