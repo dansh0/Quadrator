@@ -1,6 +1,6 @@
 {
   "name": "quadrator",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "packageManager": "pnpm@11.10.0",
   "scripts": {
@@ -12,7 +12,8 @@
     "dev:ui": "pnpm --filter @quadrator/ui dev",
     "dev:web": "pnpm --filter @quadrator/web dev",
     "dev:desktop": "pnpm --filter @quadrator/ui build && pnpm --filter @quadrator/desktop start",
-    "package:desktop": "pnpm --filter @quadrator/ui build && pnpm --filter @quadrator/desktop dist"
+    "package:desktop": "pnpm --filter @quadrator/ui build && pnpm --filter @quadrator/desktop dist",
+    "package:desktop:win": "pnpm --filter @quadrator/ui build && pnpm --filter @quadrator/desktop dist:win"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,5 +1,6 @@
 import { InMemoryPlatformAdapter, PlatformAdapter, PlatformIOError } from '@quadrator/core';
 import { describe, expect, it } from 'vitest';
+import { reactive } from 'vue';
 import { ElectronPlatformAdapter } from '../src/platform/electron.ts';
 
 /** A bridge whose every method rejects like an IPC error clone. */
@@ -46,5 +47,33 @@ describe('ElectronPlatformAdapter', () => {
       adapter.loadImage({ id: '/img/a.jpg', name: 'a.jpg' })
     ).rejects.toThrow(/load image a\.jpg failed: .*ENOENT/);
     await expect(adapter.saveSettings({})).rejects.toThrow(PlatformIOError);
+  });
+
+  it('passes plain data across the bridge, even when given reactive store state', async () => {
+    // contextBridge structured-clones every argument; a Vue proxy can't be.
+    const calls: unknown[][] = [];
+    const inner = new InMemoryPlatformAdapter();
+    const cloning = new Proxy(inner, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          calls.push(args.map((a) => structuredClone(a))); // throws on a proxy
+          return value.apply(target, args);
+        };
+      },
+    }) as PlatformAdapter;
+    const adapter = new ElectronPlatformAdapter(cloning);
+
+    const ref = reactive({ id: '/data/s.json', name: 's.json' });
+    expect(() => structuredClone(ref)).toThrow(); // the bug this guards
+    await adapter.saveSession(ref, '{}');
+    inner.addImage({ id: '/img/a.jpg', name: 'a.jpg' });
+    await adapter.loadImage(reactive({ id: '/img/a.jpg', name: 'a.jpg' }));
+    await adapter.relinkImage(reactive({ id: '/img/b.jpg', name: 'b.jpg' }));
+    await adapter.saveSettings(reactive({ hotkeysEnabled: true, nested: { a: [1, 2] } }));
+
+    expect(calls[0]).toEqual([{ id: '/data/s.json', name: 's.json' }, '{}']);
+    expect(await adapter.loadSettings()).toEqual({ hotkeysEnabled: true, nested: { a: [1, 2] } });
   });
 });

@@ -1,8 +1,13 @@
 /**
  * Renderer-side wrapper for the desktop preload bridge. The bridge is
- * PlatformAdapter-shaped, but errors crossing the IPC boundary arrive as
- * bare Error clones — this wrapper restores the adapter contract by
- * normalizing them into PlatformIOError.
+ * PlatformAdapter-shaped, but crossing it has two rules this wrapper keeps:
+ *
+ * - Arguments must be structured-cloneable: contextBridge copies them into
+ *   the preload's world, and a Vue reactive proxy (e.g. a FileRef straight
+ *   out of a Pinia store) cannot be copied — the call fails with "An object
+ *   could not be cloned". Every argument is passed as plain data.
+ * - Errors arrive as bare Error clones; they are normalized into
+ *   PlatformIOError so the adapter contract holds.
  */
 import {
   FileRef,
@@ -33,6 +38,16 @@ async function wrap<T>(what: string, call: () => Promise<T>): Promise<T> {
   }
 }
 
+/** A plain copy of a FileRef, whatever (reactive) object it came in as. */
+function plainRef(ref: FileRef): FileRef {
+  return { id: ref.id, name: ref.name };
+}
+
+/** A plain copy of a JSON document (the settings document is JSON). */
+function plainJson(value: unknown): unknown {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
 export class ElectronPlatformAdapter implements PlatformAdapter {
   readonly capabilities: PlatformCapabilities;
 
@@ -49,7 +64,7 @@ export class ElectronPlatformAdapter implements PlatformAdapter {
   }
 
   saveSession(ref: FileRef, text: string): Promise<void> {
-    return wrap(`save session to ${ref.name}`, () => this.bridge.saveSession(ref, text));
+    return wrap(`save session to ${ref.name}`, () => this.bridge.saveSession(plainRef(ref), text));
   }
 
   openSpeciesCsv(): Promise<OpenedTextFile | null> {
@@ -61,11 +76,11 @@ export class ElectronPlatformAdapter implements PlatformAdapter {
   }
 
   loadImage(ref: FileRef): Promise<string> {
-    return wrap(`load image ${ref.name}`, () => this.bridge.loadImage(ref));
+    return wrap(`load image ${ref.name}`, () => this.bridge.loadImage(plainRef(ref)));
   }
 
   relinkImage(missing: FileRef): Promise<FileRef | null> {
-    return wrap(`relink image ${missing.name}`, () => this.bridge.relinkImage(missing));
+    return wrap(`relink image ${missing.name}`, () => this.bridge.relinkImage(plainRef(missing)));
   }
 
   exportCsv(text: string, suggestedName: string): Promise<FileRef | null> {
@@ -77,6 +92,6 @@ export class ElectronPlatformAdapter implements PlatformAdapter {
   }
 
   saveSettings(value: unknown): Promise<void> {
-    return wrap('save settings', () => this.bridge.saveSettings(value));
+    return wrap('save settings', () => this.bridge.saveSettings(plainJson(value)));
   }
 }

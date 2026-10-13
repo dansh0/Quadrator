@@ -10,11 +10,13 @@ import { useSessionStore } from '../src/stores/session.ts';
 export function mountWithShell(
   component: Component,
   platform: InMemoryPlatformAdapter = new InMemoryPlatformAdapter(),
-  props: Record<string, unknown> = {}
+  props: Record<string, unknown> = {},
+  options: { attachTo?: Element } = {}
 ) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const wrapper = mount(component, {
+    ...options,
     props,
     global: {
       plugins: [pinia, createAppVuetify()],

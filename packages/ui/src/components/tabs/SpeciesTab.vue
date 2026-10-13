@@ -156,12 +156,14 @@ function onCaptureKeydown(event: KeyboardEvent): void {
 
 function onKeydown(event: KeyboardEvent): void {
   if (bindMode.value || !species.hotkeysEnabled || isTypingTarget(event.target)) return;
+  // modified keys belong to others: Alt+Left/Right switches tabs (RightPanel)
+  if (event.ctrlKey || event.shiftKey || event.metaKey || event.altKey) return;
 
   if (event.key === 'ArrowRight' || event.key === 'Enter') {
     tagging.nextSample();
   } else if (event.key === 'ArrowLeft' || event.key === 'Backspace') {
     tagging.prevSample();
-  } else if (!event.ctrlKey && !event.shiftKey && !event.metaKey && !event.altKey) {
+  } else {
     const code = species.codeForKey(event.key);
     if (code !== null) tagging.toggleCode(code);
   }

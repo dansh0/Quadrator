@@ -102,6 +102,19 @@ describe('MenuButtons destructive-action guards', () => {
     expect(wrapper.find('[data-test="menu-start-over"]').exists()).toBe(true);
   });
 
+  it('Save Session confirms with a snackbar naming the file', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    platform.queueSaveTarget({ id: 'f1', name: 'survey.json' });
+    const { wrapper } = mountWithShell(MenuButtons, platform);
+    seedSession([taggedQuadrat('q1', 1)]);
+
+    await wrapper.find('[data-test="menu-save-session"]').trigger('click');
+    await flush();
+
+    expect(platform.savedSessions).toHaveLength(1);
+    expect(overlay('[data-test="menu-notice"]')?.textContent).toContain('Session saved to survey.json.');
+  });
+
   it('Species List opens the species editor', async () => {
     const { wrapper } = mountWithShell(MenuButtons);
     expect(overlay('[data-test="species-editor"]')).toBeNull();

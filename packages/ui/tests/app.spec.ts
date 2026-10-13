@@ -7,6 +7,7 @@ import App from '../src/App.vue';
 import { platformKey } from '../src/platform.ts';
 import { createAppVuetify } from '../src/plugins/vuetify.ts';
 import { emptySession, useSessionStore } from '../src/stores/session.ts';
+import { stubVisualViewport } from './helpers.ts';
 
 function mountApp(platform = new InMemoryPlatformAdapter()) {
   return mount(App, {
@@ -143,6 +144,23 @@ describe('App shell (Vue 3 + Vuetify 3 + Pinia + core wiring)', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
     await flush();
     expect(platform.savedSessions).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it('Ctrl+S saves and confirms with a snackbar', async () => {
+    stubVisualViewport();
+    const platform = new InMemoryPlatformAdapter();
+    platform.queueImagePick([{ id: '/photos/reef-1.jpg', name: 'reef-1.jpg' }]);
+    platform.queueSaveTarget({ id: '/sessions/ctrl-s.json', name: 'ctrl-s.json' });
+    const wrapper = mountApp(platform);
+    await wrapper.find('[data-test="home-load-images"]').trigger('click');
+    await flush();
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
+    await flush();
+    await flush();
+    expect(platform.savedSessions).toHaveLength(1);
+    expect(wrapper.html() + document.body.innerHTML).toContain('Session saved to ctrl-s.json.');
     wrapper.unmount();
   });
 

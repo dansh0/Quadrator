@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { exportSessionCsv } from '../export.ts';
+import { savedNotice } from '../save-notice.ts';
 import { sessionFilesEnabled } from '../features.ts';
 import { usePlatform } from '../platform.ts';
 import { useSessionStore } from '../stores/session.ts';
@@ -33,7 +34,10 @@ async function guard(work: () => Promise<void>): Promise<void> {
 }
 
 const onLoadImages = () => guard(async () => void (await session.addImages(platform)));
-const onSaveSession = () => guard(async () => void (await session.save(platform)));
+const onSaveSession = () =>
+  guard(async () => {
+    if (await session.save(platform)) notice.value = savedNotice(session.fileRef);
+  });
 const openSessionNow = () => guard(async () => void (await session.open(platform)));
 
 function onLoadSession(): void {
@@ -124,7 +128,7 @@ const buttons = sessionFilesEnabled(platform) ? allButtons : allButtons.filter((
     <v-alert v-if="error" type="error" density="compact" closable class="ma-2" data-test="menu-error" @click:close="error = null">
       {{ error }}
     </v-alert>
-    <v-snackbar :model-value="notice !== null" timeout="3000" @update:model-value="notice = null">
+    <v-snackbar :model-value="notice !== null" timeout="3000" data-test="menu-notice" @update:model-value="notice = null">
       {{ notice }}
     </v-snackbar>
 

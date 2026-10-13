@@ -40,3 +40,11 @@ pnpm --filter @quadrator/web e2e   # Playwright (needs a Chromium install once)
 ```
 pnpm package:desktop   # distributable in apps/desktop/release/
 ```
+
+### Windows build
+
+**From Linux, with Wine installed:**
+
+```
+pnpm package:desktop:win   # apps/desktop/release/Quadrator Setup <version>.exe
+```

@@ -3,14 +3,19 @@
  * Tabbed workflow panel. Species ID and Data Review stay disabled until the
  * current quadrat has a defined boundary (legacy tab-gating rule), and the
  * active tab snaps back to Image Prep when the boundary goes away.
+ *
+ * Plain Left/Right step the sample (SpeciesTab), so the tab bar must not
+ * keep focus: Vuetify moves focus between tabs on arrow keys, which showed
+ * as the tab highlight wandering while samples stepped. Alt+Left/Right
+ * switch tabs instead.
  */
-import { computed, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import ImagePrepTab from './tabs/ImagePrepTab.vue';
 import QaTab from './tabs/QaTab.vue';
 import SpeciesTab from './tabs/SpeciesTab.vue';
 import { useSessionStore } from '../stores/session.ts';
-import { useTaggingStore } from '../stores/tagging.ts';
+import { useTaggingStore, type WorkflowTab } from '../stores/tagging.ts';
 
 const emit = defineEmits<{
   (e: 'reset-nodes'): void;
@@ -24,6 +29,37 @@ const geoDefined = computed(() => session.currentQuadrat?.geoDefined === true);
 watch(geoDefined, (defined) => {
   if (!defined) tab.value = 'prep';
 });
+
+/** Once a tab is clicked (or Enter'd) — even the active one — hand focus back to the page. */
+function releaseFocus(event: MouseEvent): void {
+  const bar = event.currentTarget as HTMLElement;
+  void nextTick(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && bar.contains(active)) active.blur();
+  });
+}
+
+const ORDER: WorkflowTab[] = ['prep', 'species', 'qa'];
+
+/** The neighbouring enabled tab, or null at either end. */
+function adjacentTab(step: 1 | -1): WorkflowTab | null {
+  const next = ORDER[ORDER.indexOf(tab.value) + step];
+  if (next === undefined || (next !== 'prep' && !geoDefined.value)) return null;
+  return next;
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (!event.altKey || event.ctrlKey || event.shiftKey || event.metaKey) return;
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  // not from inside a dialog (the species editor has its own keys)
+  if (event.target instanceof Element && event.target.closest('.v-overlay') !== null) return;
+  event.preventDefault(); // Alt+Left is also the browser's Back
+  const next = adjacentTab(event.key === 'ArrowRight' ? 1 : -1);
+  if (next !== null) tab.value = next;
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown));
+onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 </script>
 
 <template>
@@ -32,7 +68,14 @@ watch(geoDefined, (defined) => {
          the bar itself grow inside this column flexbox. flex-shrink-0: the
          card has a fixed height, so a tall tab would otherwise squash the
          bar instead of scrolling the content area below. -->
-    <v-tabs v-model="tab" bg-color="primary" density="compact" grow class="flex-grow-0 flex-shrink-0">
+    <v-tabs
+      v-model="tab"
+      bg-color="primary"
+      density="compact"
+      grow
+      class="flex-grow-0 flex-shrink-0"
+      @click="releaseFocus"
+    >
       <v-tab value="prep" class="px-1" data-test="tab-prep">Image Prep</v-tab>
       <v-tab value="species" class="px-1" :disabled="!geoDefined" data-test="tab-species">
         Species ID

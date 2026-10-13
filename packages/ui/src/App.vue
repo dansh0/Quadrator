@@ -6,6 +6,7 @@ import homeBgUrl from './assets/pexels-pok-rie-33563-1031200.jpg';
 import { createAutosaver } from './autosave.ts';
 import ImageCanvas from './components/ImageCanvas.vue';
 import { sessionFilesEnabled } from './features.ts';
+import { savedNotice } from './save-notice.ts';
 import RightPanel from './components/RightPanel.vue';
 import { usePlatform } from './platform.ts';
 import { useSessionStore } from './stores/session.ts';
@@ -22,6 +23,8 @@ const sessionFiles = sessionFilesEnabled(platform);
 
 const hasAutosave = ref(false);
 const homeError = ref<string | null>(null);
+/** Ctrl+S outcome — a save from the keyboard gets the same feedback as the button. */
+const saveNotice = ref<string | null>(null);
 
 async function onLoadImages(): Promise<void> {
   await store.addImages(platform);
@@ -52,10 +55,18 @@ store.$subscribe(() => {
   if (sessionFiles && store.quadratCount > 0) autosaver.notify();
 });
 
+async function saveFromKeyboard(): Promise<void> {
+  try {
+    if (await store.save(platform)) saveNotice.value = savedNotice(store.fileRef);
+  } catch (e) {
+    saveNotice.value = `Save failed: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
 function onKeydown(event: KeyboardEvent): void {
   if (sessionFiles && event.ctrlKey && event.key === 's') {
     event.preventDefault();
-    void store.save(platform);
+    void saveFromKeyboard();
   }
 }
 
@@ -160,6 +171,9 @@ onUnmounted(() => {
         </v-row>
       </v-container>
     </v-main>
+    <v-snackbar :model-value="saveNotice !== null" timeout="3000" data-test="save-notice" @update:model-value="saveNotice = null">
+      {{ saveNotice }}
+    </v-snackbar>
   </v-app>
 </template>
 

@@ -1,6 +1,6 @@
 {
   "name": "@quadrator/desktop",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "Quadrator desktop shell: Electron with context isolation; implements PlatformAdapter over typed IPC.",
   "author": "Shores Design",
@@ -12,7 +12,8 @@
     "start": "node build.mjs && electron .",
     "dev": "node build.mjs && QUADRATOR_DEV_URL=http://localhost:5173 electron .",
     "dist": "node build.mjs --require-renderer && electron-builder",
-    "dist:dir": "node build.mjs --require-renderer && electron-builder --dir"
+    "dist:dir": "node build.mjs --require-renderer && electron-builder --dir",
+    "dist:win": "node build.mjs --require-renderer && electron-builder --win"
   },
   "dependencies": {
     "@quadrator/core": "workspace:*"

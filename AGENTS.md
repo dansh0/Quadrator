@@ -49,6 +49,10 @@ Other commands:
 - `pnpm package:desktop` — build the full distributable
   (`apps/desktop/release/`, AppImage on Linux). `dist:dir` builds the
   unpacked directory only, which is faster and what the gate uses.
+- `pnpm package:desktop:win` — the Windows NSIS installer, cross-built
+  from Linux (electron-builder runs the Windows tools under Wine, which
+  must be installed). Output: `apps/desktop/release/Quadrator Setup
+  <version>.exe`.
 - `pnpm dev:web` (alias for `pnpm --filter @quadrator/web dev`) — the
   **web app** in a browser on the `BrowserPlatformAdapter` (real File
   System Access pickers on Chromium, `<input type=file>` on Firefox).
