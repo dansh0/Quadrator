@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { validateSpecies } from '../src/species/hotkeys.ts';
 import { CsvParseError, parseSpeciesCsv } from '../src/species/parse.ts';
 
 // cwd-relative: vitest runs from the repo root
@@ -93,6 +94,19 @@ describe('parseSpeciesCsv', () => {
 
   it('rejects an unterminated quoted field', () => {
     expect(() => parseSpeciesCsv('code,species\nA,"broken\n')).toThrow(CsvParseError);
+  });
+
+  it("loads a file written with ', ' separators: colours trimmed, text kept", () => {
+    const entries = parseSpeciesCsv(
+      'code,species,group1,group2,color,colorSelected\nAnom, Anthopleura_sp, Animal, , #9c27b0, #7c1790\n'
+    );
+    expect(entries[0]).toMatchObject({
+      species: ' Anthopleura_sp',
+      group1: ' Animal',
+      color: '#9c27b0',
+      colorSelected: '#7c1790',
+    });
+    expect(validateSpecies(entries)).toEqual([]);
   });
 
   it('reads an optional hotkey column, trimmed and lowercased', () => {

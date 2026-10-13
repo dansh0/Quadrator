@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { InMemoryPlatformAdapter, serializeSession } from '@quadrator/core';
-import { mount } from '@vue/test-utils';
+import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import App from '../src/App.vue';
 import { platformKey } from '../src/platform.ts';
 import { createAppVuetify } from '../src/plugins/vuetify.ts';
@@ -19,6 +19,9 @@ function mountApp(platform = new InMemoryPlatformAdapter()) {
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
+
+// App listens on window: a leftover mount would answer later tests' keys.
+enableAutoUnmount(afterEach);
 
 describe('App shell (Vue 3 + Vuetify 3 + Pinia + core wiring)', () => {
   it('renders the home screen (no right panel) before any quadrat exists', () => {
@@ -139,12 +142,12 @@ describe('App shell (Vue 3 + Vuetify 3 + Pinia + core wiring)', () => {
     const settings = (await platform.loadSettings()) as Record<string, unknown>;
     expect(settings['lastSessionText']).toBe('{"schemaVersion": 2}');
 
-    // Ctrl+S saves nothing (earlier tests' apps still listen on window, so
-    // defaultPrevented can't be asserted here)
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
+    // Ctrl+S saves nothing, and leaves the browser's own Ctrl+S alone
+    const ctrlS = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, cancelable: true });
+    window.dispatchEvent(ctrlS);
     await flush();
     expect(platform.savedSessions).toHaveLength(0);
-    wrapper.unmount();
+    expect(ctrlS.defaultPrevented).toBe(false);
   });
 
   it('Ctrl+S saves and confirms with a snackbar', async () => {
@@ -161,7 +164,6 @@ describe('App shell (Vue 3 + Vuetify 3 + Pinia + core wiring)', () => {
     await flush();
     expect(platform.savedSessions).toHaveLength(1);
     expect(wrapper.html() + document.body.innerHTML).toContain('Session saved to ctrl-s.json.');
-    wrapper.unmount();
   });
 
   it('shows the release version on the home screen', () => {

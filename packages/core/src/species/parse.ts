@@ -71,9 +71,11 @@ function parseCsvRecords(text: string): string[][] {
  * Parse a species/buttons CSV. The header row must contain `code` and
  * `species` columns (others: group1, group2, color, colorSelected, hotkey;
  * missing columns default to ''). Rows with an empty species field are
- * skipped, matching the legacy loader. Hotkeys are trimmed and lowercased
- * but not validated here — see validateSpecies — so a list that predates a
- * rule still loads.
+ * skipped, matching the legacy loader. Text cells are kept exactly (they
+ * reach the export, and the legacy loader didn't trim); colours and hotkeys
+ * are trimmed, so a file written with ', ' separators still loads, and
+ * hotkeys lowercased. Nothing is validated here — see validateSpecies — so
+ * a list that predates a rule still loads.
  */
 export function parseSpeciesCsv(text: string): SpeciesEntry[] {
   const records = parseCsvRecords(text);
@@ -100,8 +102,8 @@ export function parseSpeciesCsv(text: string): SpeciesEntry[] {
       species: col(row, 'species'),
       group1: col(row, 'group1'),
       group2: col(row, 'group2'),
-      color: col(row, 'color'),
-      colorSelected: col(row, 'colorSelected'),
+      color: col(row, 'color').trim(),
+      colorSelected: col(row, 'colorSelected').trim(),
       hotkey: col(row, 'hotkey').trim().toLowerCase(),
     });
   }

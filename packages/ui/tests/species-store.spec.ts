@@ -111,17 +111,90 @@ describe('species store', () => {
     expect(store.codes).toEqual(['Ulva', 'Barn', 'Myt']);
   });
 
-  it('init still loads a persisted list with duplicate codes, but not one with a key clash', async () => {
+  it('init still loads a persisted list with duplicate codes', async () => {
     const platform = new InMemoryPlatformAdapter();
     await platform.saveSettings({ speciesCsvText: 'code,species\nA,Alpha\nA,Again\n' });
     const store = useSpeciesStore();
     await store.init(platform);
     expect(store.codes).toEqual(['A', 'A']);
+    expect(store.loadWarning).toBeNull();
+  });
 
+  it('init clears clashing saved keys with a warning, keeping the list', async () => {
+    const platform = new InMemoryPlatformAdapter();
     await platform.saveSettings({ speciesCsvText: 'code,species,hotkey\nA,Alpha,q\nB,Beta,q\n' });
-    store.$reset();
+    const store = useSpeciesStore();
+    await store.init(platform);
+    expect(store.codes).toEqual(['A', 'B']);
+    expect(store.hotkeyFor('A')).toBe('q');
+    expect(store.hotkeyFor('B')).toBe('w'); // back on the automatic layout
+    expect(store.loadWarning).toMatch(/row 2, hotkey/);
+
+    // the next save writes the repaired list, not nothing
+    await store.setHotkeysEnabled(platform, false);
+    expect(await persistedCsv(platform)).toContain('B,Beta');
+  });
+
+  it('an unreadable saved list is kept in storage, with a warning', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    await platform.saveSettings({ speciesCsvText: 'not,a\nbuttons file' });
+    const store = useSpeciesStore();
     await store.init(platform);
     expect(store.entries).toEqual([]);
+    expect(store.loadWarning).toMatch(/couldn't be read/);
+
+    await store.setHotkeysEnabled(platform, false);
+    expect(await persistedCsv(platform)).toBe('not,a\nbuttons file');
+
+    // replacing the list clears the warning
+    platform.queueSpeciesOpen(SPECIES_CSV);
+    await store.loadFromFile(platform);
+    expect(store.loadWarning).toBeNull();
+  });
+
+  it('a failed save leaves the hotkeys as they were', async () => {
+    const { platform, store } = await loaded();
+    const csvBefore = store.csvText;
+    platform.saveSettings = async () => {
+      throw new Error('storage full');
+    };
+    await expect(store.assignHotkey(platform, 'Ulva', 'w')).rejects.toThrow('storage full');
+    expect(store.hotkeyFor('Ulva')).toBe('q');
+    expect(store.hotkeyFor('Barn')).toBe('w');
+    expect(store.csvText).toBe(csvBefore);
+
+    await expect(store.replaceEntries(platform, store.entries.slice(0, 1))).rejects.toThrow('storage full');
+    expect(store.codes).toEqual(['Ulva', 'Barn', 'Myt']);
+  });
+
+  it('taking a key held on a later row of a repeated code swaps that row', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    await platform.saveSettings({ speciesCsvText: 'code,species,hotkey\nA,Alpha,\nB,Beta,\nA,Again,z\n' });
+    const store = useSpeciesStore();
+    await store.init(platform);
+    expect(store.hotkeyFor('A')).toBe('z');
+    const bKey = store.hotkeyFor('B');
+
+    await store.assignHotkey(platform, 'B', 'z');
+    expect(store.hotkeyFor('B')).toBe('z');
+    expect(store.hotkeyFor('A')).toBe(bKey);
+    expect(store.hotkeys.size).toBe(2); // no clash: hotkeys still resolve
+  });
+
+  it('restoreEntries undoes a rebind on a list replaceEntries would refuse', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    await platform.saveSettings({ speciesCsvText: 'code,species\nA,Alpha\nB,Beta\nA,Again\n' });
+    const store = useSpeciesStore();
+    await store.init(platform);
+    const before = store.entries.map((e) => ({ ...e }));
+    await store.assignHotkey(platform, 'A', 'z');
+
+    await expect(store.replaceEntries(platform, before)).rejects.toThrow(SpeciesValidationError);
+    await store.restoreEntries(platform, before);
+    expect(store.hotkeyFor('A')).toBe('q');
+    // still refuses a key clash
+    const clash = before.map((e, i) => ({ ...e, hotkey: i < 2 ? 'x' : '' }));
+    await expect(store.restoreEntries(platform, clash)).rejects.toThrow(HotkeyError);
   });
 
   it('assignHotkey binds a free key and persists it as CSV', async () => {

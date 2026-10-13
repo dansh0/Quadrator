@@ -91,6 +91,51 @@ describe('RightPanel keyboard', () => {
     expect(tagging.cursor).toBe(1);
   });
 
+  const setPlatform = (value: string) =>
+    Object.defineProperty(navigator, 'platform', { value, configurable: true });
+
+  it.each([
+    ['text field', () => document.createElement('input')],
+    ['textarea', () => document.createElement('textarea')],
+  ])('Alt+arrows in a %s never switch tabs; Back stays blocked off macOS', async (_, make) => {
+    const shell = mountWithShell(RightPanel, undefined, {}, { attachTo: document.body });
+    seedSession([taggedQuadrat('q1', 2)]);
+    await shell.wrapper.vm.$nextTick();
+    const field = make();
+    document.body.appendChild(field);
+    const original = navigator.platform;
+    const altArrow = () => {
+      const event = new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true, cancelable: true });
+      field.dispatchEvent(event);
+      return event;
+    };
+    try {
+      setPlatform('Win32');
+      expect(altArrow().defaultPrevented).toBe(true); // not the browser's Back
+      setPlatform('MacIntel');
+      expect(altArrow().defaultPrevented).toBe(false); // Option+Left moves by word
+      expect(useTaggingStore().activeTab).toBe('prep');
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true }));
+      expect(useTaggingStore().activeTab).toBe('prep');
+    } finally {
+      setPlatform(original);
+      field.remove();
+    }
+  });
+
+  it('a focused switch or checkbox does not block Alt+arrows', async () => {
+    const shell = mountWithShell(RightPanel, undefined, {}, { attachTo: document.body });
+    seedSession([taggedQuadrat('q1', 2)]);
+    await shell.wrapper.vm.$nextTick();
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    document.body.appendChild(box);
+
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true }));
+    expect(useTaggingStore().activeTab).toBe('species');
+    box.remove();
+  });
+
   it('a clicked tab gives focus back, so arrow keys cannot move the tab highlight', async () => {
     const shell = mountWithShell(RightPanel, undefined, {}, { attachTo: document.body });
     seedSession([taggedQuadrat('q1', 2)]);

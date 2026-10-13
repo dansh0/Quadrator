@@ -15,6 +15,7 @@ import ImagePrepTab from './tabs/ImagePrepTab.vue';
 import QaTab from './tabs/QaTab.vue';
 import SpeciesTab from './tabs/SpeciesTab.vue';
 import { useSessionStore } from '../stores/session.ts';
+import { isTextField } from '../text-field.ts';
 import { useTaggingStore, type WorkflowTab } from '../stores/tagging.ts';
 
 const emit = defineEmits<{
@@ -48,12 +49,20 @@ function adjacentTab(step: 1 | -1): WorkflowTab | null {
   return next;
 }
 
+/** On macOS, Option+arrow moves by word and Back is Cmd+[. */
+const isMac = (): boolean => /mac/i.test(navigator.platform);
+
 function onKeydown(event: KeyboardEvent): void {
   if (!event.altKey || event.ctrlKey || event.shiftKey || event.metaKey) return;
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-  // not from inside a dialog (the species editor has its own keys)
-  if (event.target instanceof Element && event.target.closest('.v-overlay') !== null) return;
-  event.preventDefault(); // Alt+Left is also the browser's Back
+  // Elsewhere Alt+Left is the browser's Back, which would leave the app
+  // (and its unsaved session), so it is always blocked off macOS.
+  if (!isMac()) event.preventDefault();
+  // Never switch tabs mid-edit or from inside a dialog (the species
+  // editor has its own keys).
+  const t = event.target;
+  if (isTextField(t) || (t instanceof Element && t.closest('.v-overlay') !== null)) return;
+  event.preventDefault();
   const next = adjacentTab(event.key === 'ArrowRight' ? 1 : -1);
   if (next !== null) tab.value = next;
 }

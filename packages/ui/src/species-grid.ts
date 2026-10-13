@@ -283,8 +283,14 @@ export function mergeByCode(rows: readonly DraftRow[], incoming: readonly Specie
 }
 
 export interface CodeChanges {
-  /** old code → new code, for saved rows whose code was edited. */
+  /** old code → new code, for saved codes whose row was edited. */
   renames: Map<string, string>;
+  /**
+   * Rename targets that were already saved codes (and aren't renamed away
+   * themselves, as in a swap): their existing tags will now count as the
+   * renamed species, and renaming tags merges the two.
+   */
+  merges: Set<string>;
   /** Saved codes that no longer appear anywhere in the draft. */
   deleted: string[];
 }
@@ -292,15 +298,25 @@ export interface CodeChanges {
 /** How saving `rows` would change the codes of the `saved` list. */
 export function diffCodes(saved: readonly SpeciesEntry[], rows: readonly DraftRow[]): CodeChanges {
   const kept = rows.filter((r) => !isBlank(r));
-  const renames = new Map<string, string>();
+  const present = new Set(kept.map((r) => r.code));
+  // A saved row that still has its code keeps that code's meaning: another
+  // row of a repeated code being edited is a new code, not a rename. (A row
+  // that merely takes the code over, as in a swap, doesn't count.)
+  const unchanged = new Set(kept.filter((r) => r.originalCode === r.code).map((r) => r.code));
+  const targets = new Map<string, Set<string>>();
   for (const r of kept) {
-    if (r.originalCode !== null && r.code !== '' && r.code !== r.originalCode) {
-      renames.set(r.originalCode, r.code);
+    const from = r.originalCode;
+    if (from !== null && r.code !== '' && r.code !== from && !unchanged.has(from)) {
+      targets.set(from, (targets.get(from) ?? new Set()).add(r.code));
     }
   }
-  const present = new Set(kept.map((r) => r.code));
-  const deleted = saved
-    .map((e) => e.code)
-    .filter((c) => !renames.has(c) && !present.has(c));
-  return { renames, deleted };
+  // A repeated code edited two ways has no single new name; its tags are
+  // left to the "removed" warning instead.
+  const renames = new Map<string, string>();
+  for (const [from, to] of targets) if (to.size === 1) renames.set(from, [...to][0]!);
+
+  const savedCodes = new Set(saved.map((e) => e.code));
+  const merges = new Set([...renames.values()].filter((to) => savedCodes.has(to) && !renames.has(to)));
+  const deleted = [...savedCodes].filter((c) => !renames.has(c) && !present.has(c));
+  return { renames, merges, deleted };
 }

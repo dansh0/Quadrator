@@ -52,7 +52,13 @@ describe('resolveHotkeys', () => {
 
   it('resolves a repeated code once, from its first row', () => {
     const keys = resolveHotkeys([entry('A'), entry('A'), entry('B')]);
-    expect(Object.fromEntries(keys)).toEqual({ A: 'q', B: 'w' });
+    expect(Object.fromEntries(keys)).toEqual({ A: 'q', B: 'e' });
+  });
+
+  it('keeps the legacy positions after a repeated code', () => {
+    // legacy: A=q, B=w, A(again)=e, C=r — C must not slide to 'e'
+    const keys = resolveHotkeys([entry('A'), entry('B'), entry('A'), entry('C')]);
+    expect(Object.fromEntries(keys)).toEqual({ A: 'q', B: 'w', C: 'r' });
   });
 
   it('throws HotkeyError on a duplicate or unassignable explicit key', () => {
@@ -147,8 +153,9 @@ describe('serializeSpeciesCsv', () => {
       species: text.filter((s) => s !== ''),
       group1: text,
       group2: text,
-      color: text,
-      colorSelected: text,
+      // colours are trimmed on load (and never valid with edge whitespace)
+      color: text.map((s) => s.trim()),
+      colorSelected: text.map((s) => s.trim()),
       hotkey: fc.constantFrom('', ...ASSIGNABLE_HOTKEYS),
     });
     fc.assert(

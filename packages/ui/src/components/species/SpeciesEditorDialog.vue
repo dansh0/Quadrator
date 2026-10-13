@@ -59,6 +59,8 @@ type Prompt =
       kind: 'codes';
       entries: SpeciesEntry[];
       renames: Array<{ from: string; to: string; count: number }>;
+      /** Tagged codes a rename moved onto: their samples now count as `from`'s species. */
+      reassigned: Array<{ code: string; from: string; count: number }>;
       deleted: Array<{ code: string; count: number }>;
     };
 const prompt = ref<Prompt | null>(null);
@@ -180,19 +182,24 @@ const onTemplate = () => guard(async () => void (await platform.exportCsv(templa
 function onSave(): void {
   if (issues.value.length > 0) return;
   const usage = session.codeUsage;
-  const { renames, deleted } = diffCodes(species.entries, rows.value);
+  const { renames, merges, deleted } = diffCodes(species.entries, rows.value);
   const taggedRenames = [...renames]
     .map(([from, to]) => ({ from, to, count: usage.get(from) ?? 0 }))
+    .filter((r) => r.count > 0);
+  const taggedReassigned = [...renames]
+    .filter(([, to]) => merges.has(to))
+    .map(([from, to]) => ({ code: to, from, count: usage.get(to) ?? 0 }))
     .filter((r) => r.count > 0);
   const taggedDeletes = deleted
     .map((code) => ({ code, count: usage.get(code) ?? 0 }))
     .filter((d) => d.count > 0);
 
-  if (taggedRenames.length > 0 || taggedDeletes.length > 0) {
+  if (taggedRenames.length > 0 || taggedReassigned.length > 0 || taggedDeletes.length > 0) {
     prompt.value = {
       kind: 'codes',
       entries: entries.value,
       renames: taggedRenames,
+      reassigned: taggedReassigned,
       deleted: taggedDeletes,
     };
     return;
@@ -389,6 +396,20 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
               </li>
             </ul>
             <p class="mb-3">Rename those tags too? If you keep the old tags, they export as UNKNOWN CODE.</p>
+          </template>
+          <template v-if="prompt.reassigned.length > 0">
+            <p class="mb-2">These tagged codes now belong to a renamed species:</p>
+            <ul class="ml-4 mb-2" data-test="prompt-codes-reassigned">
+              <li v-for="r in prompt.reassigned" :key="r.code">
+                <strong>{{ r.code }}</strong> ({{ plural(r.count, 'sample') }}), now the species that was
+                <strong>{{ r.from }}</strong>
+              </li>
+            </ul>
+            <p class="mb-3">
+              Those samples will count as that species.<template v-if="prompt.renames.length > 0">
+                Renaming tags also merges the renamed code's samples into them.</template
+              >
+            </p>
           </template>
           <template v-if="prompt.deleted.length > 0">
             <p class="mb-2">You removed codes that are tagged in this session:</p>

@@ -10,10 +10,12 @@ import {
   PlatformAdapter,
   SpeciesEntry,
   assertValidSpecies,
+  formatIssue,
   hotkeyProblem,
   parseSpeciesCsv,
   resolveHotkeys,
   serializeSpeciesCsv,
+  validateSpecies,
 } from '@quadrator/core';
 import { defineStore } from 'pinia';
 import { parseUiSettings } from '../settings.ts';
@@ -23,6 +25,8 @@ export interface SpeciesState {
   hotkeysEnabled: boolean;
   /** CSV of the current button set (what gets persisted). */
   csvText: string | null;
+  /** Why the saved list didn't load as stored (shown on the Species tab). */
+  loadWarning: string | null;
 }
 
 /** What assignHotkey changed, for the UI to report (and undo). */
@@ -44,6 +48,7 @@ export const useSpeciesStore = defineStore('species', {
     entries: [],
     hotkeysEnabled: true,
     csvText: null,
+    loadWarning: null,
   }),
 
   getters: {
@@ -75,21 +80,31 @@ export const useSpeciesStore = defineStore('species', {
     async init(platform: PlatformAdapter): Promise<void> {
       const settings = parseUiSettings(await platform.loadSettings());
       this.hotkeysEnabled = settings.hotkeysEnabled;
-      if (settings.speciesCsvText !== null) {
-        // Trust-but-verify our own persisted copy; a corrupt document
-        // degrades to "no buttons loaded", never a crash. A list that
-        // predates a validation rule (e.g. duplicate codes) still loads —
-        // the species editor shows the problems and won't save until fixed.
-        try {
-          const entries = parseSpeciesCsv(settings.speciesCsvText);
-          resolveHotkeys(entries); // a key clash would make tagging ambiguous
-          this.entries = entries;
-          this.csvText = settings.speciesCsvText;
-        } catch {
-          this.entries = [];
-          this.csvText = null;
-        }
+      if (settings.speciesCsvText === null) return;
+      // Trust-but-verify our own persisted copy, but never quietly lose it:
+      // an unreadable copy stays in csvText (so the next persist writes it
+      // back) until the user loads or creates a list in its place.
+      this.csvText = settings.speciesCsvText;
+      let entries: SpeciesEntry[];
+      try {
+        entries = parseSpeciesCsv(settings.speciesCsvText);
+      } catch (e) {
+        this.entries = [];
+        const why = e instanceof Error ? e.message : String(e);
+        this.loadWarning = `The saved species list couldn't be read (${why}). Load a CSV or create a list to replace it.`;
+        return;
       }
+      // A list that predates a validation rule (e.g. duplicate codes) still
+      // loads — the species editor shows the problems and won't save until
+      // fixed. A key clash would make tagging ambiguous, so those keys are
+      // cleared (the species fall back to automatic keys) and the user told.
+      const clashes = validateSpecies(entries).filter((i) => i.field === 'hotkey');
+      if (clashes.length > 0) {
+        for (const issue of clashes) entries[issue.row]!.hotkey = '';
+        this.csvText = serializeSpeciesCsv(entries);
+        this.loadWarning = `Some saved hotkeys couldn't be used and were cleared: ${clashes.map(formatIssue).join('; ')}`;
+      }
+      this.entries = entries;
     },
 
     /**
@@ -103,18 +118,38 @@ export const useSpeciesStore = defineStore('species', {
       if (file === null) return false;
       const entries = parseSpeciesCsv(file.text);
       assertValidSpecies(entries); // throws before any state change
-      this.entries = entries;
-      this.csvText = file.text;
-      await this.persist(platform);
+      await this.commitList(platform, entries, file.text);
       return true;
     },
 
-    /** Replace the whole list (species editor Save, hotkey undo). Validates first. */
+    /** Replace the whole list (species editor Save). Validates first. */
     async replaceEntries(platform: PlatformAdapter, entries: readonly SpeciesEntry[]): Promise<void> {
       assertValidSpecies(entries);
-      this.entries = entries.map((e) => ({ ...e }));
-      this.csvText = serializeSpeciesCsv(this.entries);
-      await this.persist(platform);
+      await this.commitList(platform, entries);
+    },
+
+    /**
+     * Put back a list this store held before (hotkey Undo). Only hotkeys are
+     * re-checked: the snapshot may break a rule init() lets through (e.g.
+     * duplicate codes), and refusing it would leave the rebind un-undoable.
+     */
+    async restoreEntries(platform: PlatformAdapter, entries: readonly SpeciesEntry[]): Promise<void> {
+      resolveHotkeys(entries);
+      await this.commitList(platform, entries);
+    },
+
+    /** Make `entries` the list and persist it; on a failed save, nothing changes. */
+    async commitList(
+      platform: PlatformAdapter,
+      entries: readonly SpeciesEntry[],
+      csvText = serializeSpeciesCsv(entries)
+    ): Promise<void> {
+      const next = entries.map((e) => ({ ...e }));
+      // Save first, change after: state never shows a list that failed to save.
+      await this.persist(platform, csvText);
+      this.entries = next;
+      this.csvText = csvText;
+      this.loadWarning = null;
     },
 
     /**
@@ -129,7 +164,9 @@ export const useSpeciesStore = defineStore('species', {
       code: string,
       key: string | null
     ): Promise<HotkeyChange> {
-      const target = this.entries.find((e) => e.code === code);
+      // Work on a copy: the list changes only once the save succeeds.
+      const next = this.entries.map((e) => ({ ...e }));
+      const target = next.find((e) => e.code === code);
       if (target === undefined) throw new HotkeyError(`no species with code '${code}'`);
 
       const before = new Map(this.hotkeys);
@@ -144,14 +181,17 @@ export const useSpeciesStore = defineStore('species', {
         if (holder === code) {
           holder = null;
         } else if (holder !== null) {
-          const other = this.entries.find((e) => e.code === holder)!;
+          // the row that holds the key (a repeated code may hold it on a later row)
+          const other =
+            next.find((e) => e.code === holder && e.hotkey === key) ??
+            next.find((e) => e.code === holder)!;
           other.hotkey = previous ?? '';
         }
         target.hotkey = key;
       }
 
-      this.csvText = serializeSpeciesCsv(this.entries);
-      await this.persist(platform);
+      resolveHotkeys(next); // never save a list whose keys clash (HotkeyError)
+      await this.commitList(platform, next);
       const after = this.hotkeys;
       return {
         code,
@@ -168,12 +208,13 @@ export const useSpeciesStore = defineStore('species', {
       await this.persist(platform);
     },
 
-    async persist(platform: PlatformAdapter): Promise<void> {
+    /** Save the preference and `csvText` (default: the current list). */
+    async persist(platform: PlatformAdapter, csvText?: string | null): Promise<void> {
       const current = parseUiSettings(await platform.loadSettings());
       await platform.saveSettings({
         ...current,
         hotkeysEnabled: this.hotkeysEnabled,
-        speciesCsvText: this.csvText,
+        speciesCsvText: csvText === undefined ? this.csvText : csvText,
       });
     },
   },

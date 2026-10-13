@@ -11,9 +11,10 @@
  */
 import templateCsv from '../../assets/buttons_template.csv?raw';
 import type { SpeciesEntry } from '@quadrator/core';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { classifyCaptureKey } from '../../hotkey-capture.ts';
 import { usePlatform } from '../../platform.ts';
+import { isTextField } from '../../text-field.ts';
 import { type HotkeyChange, useSpeciesStore } from '../../stores/species.ts';
 import { useTaggingStore } from '../../stores/tagging.ts';
 import SpeciesEditorDialog from '../species/SpeciesEditorDialog.vue';
@@ -29,8 +30,18 @@ const editorOpen = ref(false);
 const bindMode = ref(false);
 const armed = ref<string | null>(null);
 const bindMessage = ref<string | null>(null);
-/** Last rebinding, for the snackbar and its Undo. */
-const lastChange = ref<{ text: string; before: SpeciesEntry[] } | null>(null);
+/**
+ * Last rebinding, for the snackbar and its Undo. `after` is the list it
+ * produced: once anything else changes the list (the species editor, a
+ * loaded CSV), undoing would wipe that change, so the Undo goes away.
+ */
+const lastChange = ref<{ text: string; before: SpeciesEntry[]; after: string | null } | null>(null);
+watch(
+  () => species.csvText,
+  (text) => {
+    if (lastChange.value !== null && text !== lastChange.value.after) lastChange.value = null;
+  }
+);
 
 const hotkeysEnabled = computed({
   get: () => species.hotkeysEnabled,
@@ -86,16 +97,9 @@ async function onDownloadTemplate(): Promise<void> {
   }
 }
 
-/** Text inputs, and anything inside a dialog or menu (teleported overlays). */
+/** Text fields, and anything inside a dialog or menu (teleported overlays). */
 function isTypingTarget(t: EventTarget | null): boolean {
-  const el = t as HTMLElement | null;
-  if (el === null) return false;
-  return (
-    el.tagName === 'INPUT' ||
-    el.tagName === 'TEXTAREA' ||
-    el.isContentEditable === true ||
-    (typeof el.closest === 'function' && el.closest('.v-overlay') !== null)
-  );
+  return isTextField(t) || (t instanceof Element && t.closest('.v-overlay') !== null);
 }
 
 function describe(change: HotkeyChange): string {
@@ -116,7 +120,7 @@ async function bind(code: string, key: string | null): Promise<void> {
   const before = species.entries.map((e) => ({ ...e }));
   try {
     const change = await species.assignHotkey(platform, code, key);
-    lastChange.value = { text: describe(change), before };
+    lastChange.value = { text: describe(change), before, after: species.csvText };
     armed.value = null;
   } catch (e) {
     bindMessage.value = e instanceof Error ? e.message : String(e);
@@ -126,9 +130,9 @@ async function bind(code: string, key: string | null): Promise<void> {
 async function undo(): Promise<void> {
   const change = lastChange.value;
   lastChange.value = null;
-  if (change === null) return;
+  if (change === null || species.csvText !== change.after) return;
   try {
-    await species.replaceEntries(platform, change.before);
+    await species.restoreEntries(platform, change.before);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   }
@@ -164,7 +168,8 @@ function onKeydown(event: KeyboardEvent): void {
   } else if (event.key === 'ArrowLeft' || event.key === 'Backspace') {
     tagging.prevSample();
   } else {
-    const code = species.codeForKey(event.key);
+    // Caps Lock types capitals with no Shift held; keys are stored lowercase
+    const code = species.codeForKey(event.key.length === 1 ? event.key.toLowerCase() : event.key);
     if (code !== null) tagging.toggleCode(code);
   }
 }
@@ -247,6 +252,18 @@ onUnmounted(() => {
       </template>
       <template v-else>Tagging is paused. Click a species, then press its new key. Esc when done.</template>
       <div v-if="bindMessage" class="text-error mt-1" data-test="bind-message">{{ bindMessage }}</div>
+    </v-alert>
+
+    <v-alert
+      v-if="species.loadWarning"
+      type="warning"
+      density="compact"
+      closable
+      class="ma-4"
+      data-test="species-load-warning"
+      @click:close="species.loadWarning = null"
+    >
+      {{ species.loadWarning }}
     </v-alert>
 
     <v-alert v-if="error" type="error" density="compact" closable class="ma-4" data-test="species-error" @click:close="error = null">

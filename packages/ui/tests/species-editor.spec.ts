@@ -406,6 +406,31 @@ describe('SpeciesEditorDialog', () => {
     expect(useSessionStore().session!.quadrats[0]!.samples[0]!.codes).toEqual(['Ulv', 'Barn']);
   });
 
+  it('renaming onto a removed, tagged code warns that its tags change species', async () => {
+    await openEditor(['Barn']); // only Barn is tagged; Ulva is not
+    await click('row-menu-1');
+    await click('row-delete');
+    await type('cell-0-code', 'Barn');
+    await click('editor-save');
+    const text = must('prompt-codes').textContent!;
+    expect(must('prompt-codes-reassigned').textContent).toMatch(/Barn \(1 sample\), now the species that was\s*Ulva/);
+    expect(text).not.toMatch(/already tagged|You removed|merges/); // Ulva has no tags to rename
+    expect($('prompt-codes-rename')).toBeNull();
+
+    await click('prompt-codes-save');
+    expect(useSpeciesStore().codes).toEqual(['Barn', 'Myt']);
+  });
+
+  it('when both codes are tagged, the prompt says Rename tags merges them', async () => {
+    await openEditor(['Ulva', 'Barn']);
+    await click('row-menu-1');
+    await click('row-delete');
+    await type('cell-0-code', 'Barn');
+    await click('editor-save');
+    expect(must('prompt-codes').textContent).toMatch(/Ulva → Barn \(1 sample\)/);
+    expect(must('prompt-codes').textContent).toMatch(/merges the renamed code's samples/);
+  });
+
   it('Keep old tags saves the rename but leaves the samples alone', async () => {
     await openEditor(['Ulva']);
     await type('cell-0-code', 'Ulv');

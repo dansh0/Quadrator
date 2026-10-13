@@ -212,6 +212,83 @@ describe('SpeciesTab hotkey editing', () => {
     expect(useSpeciesStore().hotkeyFor('Ulva')).toBe('q');
   });
 
+  it('a focused switch or checkbox does not block tagging; a text field does', async () => {
+    await mountTab();
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    const text = document.createElement('input');
+    document.body.append(box, text);
+
+    keydown('q', box); // e.g. right after clicking Enable Hotkeys
+    expect(useSessionStore().currentQuadrat?.samples[0]?.codes).toEqual(['Ulva']);
+    keydown('w', text);
+    expect(useSessionStore().currentQuadrat?.samples[0]?.codes).toEqual(['Ulva']);
+    box.remove();
+    text.remove();
+  });
+
+  it('tags with Caps Lock on', async () => {
+    await mountTab();
+    keydown('Q'); // Caps Lock: a capital with no Shift
+    expect(useSessionStore().currentQuadrat?.samples[0]?.codes).toEqual(['Ulva']);
+  });
+
+  it('Undo goes away once the list changes some other way', async () => {
+    const { wrapper, platform } = await mountTab();
+    await wrapper.find('[data-test="edit-hotkeys"]').trigger('click');
+    await wrapper.find('[data-test="species-Myt"]').trigger('click');
+    keydown('q');
+    await flush();
+    await wrapper.vm.$nextTick();
+    expect(window.document.body.querySelector('[data-test="hotkey-undo"]')).not.toBeNull();
+
+    // e.g. a species editor save renames a code
+    const species = useSpeciesStore();
+    const edited = species.entries.map((e) => ({ ...e, code: e.code === 'Ulva' ? 'Ulv' : e.code }));
+    await species.replaceEntries(platform, edited);
+    await wrapper.vm.$nextTick();
+    await flush();
+    expect(species.codes).toContain('Ulv');
+    const undo = window.document.body.querySelector('[data-test="hotkey-undo"]') as HTMLElement | null;
+    undo?.click();
+    await flush();
+    expect(species.codes).toContain('Ulv'); // the editor save survives
+  });
+
+  it('a failed save keeps the earlier Undo', async () => {
+    const { wrapper, platform } = await mountTab();
+    await wrapper.find('[data-test="edit-hotkeys"]').trigger('click');
+    await wrapper.find('[data-test="species-Myt"]').trigger('click');
+    keydown('q');
+    await flush();
+    await wrapper.vm.$nextTick();
+
+    const species = useSpeciesStore();
+    const save = platform.saveSettings.bind(platform);
+    platform.saveSettings = async () => {
+      throw new Error('storage full');
+    };
+    await expect(species.replaceEntries(platform, species.entries.slice(0, 1))).rejects.toThrow('storage full');
+    platform.saveSettings = save;
+    await wrapper.vm.$nextTick();
+    await flush();
+
+    const undo = window.document.body.querySelector('[data-test="hotkey-undo"]') as HTMLElement | null;
+    expect(undo).not.toBeNull();
+    undo!.click();
+    await flush();
+    expect(species.hotkeyFor('Ulva')).toBe('q');
+  });
+
+  it('shows why the saved list did not load as stored', async () => {
+    const platform = new InMemoryPlatformAdapter();
+    await platform.saveSettings({ speciesCsvText: 'code,species,hotkey\nA,Alpha,q\nB,Beta,q\n' });
+    const { wrapper } = mountWithShell(SpeciesTab, platform);
+    await useSpeciesStore().init(platform);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-test="species-load-warning"]').text()).toMatch(/cleared/);
+  });
+
   it('refuses navigation and Shift keys with a reason', async () => {
     const { wrapper } = await mountTab();
     await wrapper.find('[data-test="edit-hotkeys"]').trigger('click');

@@ -42,7 +42,8 @@ export class HotkeyError extends Error {
  * Resolve every species' tagging key: code → key. Explicit keys first, then
  * the rest in list order take the next DEFAULT_HOTKEYS key nobody holds.
  * Species left over when the pool runs out get no key. A repeated code
- * resolves once (its first row), since tags are stored by code.
+ * resolves once (its first row), since tags are stored by code, but each
+ * repeated row without its own key still uses up a default key.
  *
  * Throws HotkeyError for an unassignable or duplicated explicit key — a
  * clash must never quietly decide which species a keypress tags.
@@ -63,10 +64,12 @@ export function resolveHotkeys(entries: readonly SpeciesEntry[]): Map<string, st
   }
   const pool = DEFAULT_HOTKEYS.filter((k) => !taken.has(k));
   for (const e of entries) {
-    if (byCode.has(e.code)) continue;
+    if (e.hotkey !== '') continue;
+    // A repeated code still uses up its key, as the legacy positional
+    // layout did — otherwise every species after it moves one key earlier.
     const key = pool.shift();
     if (key === undefined) break;
-    byCode.set(e.code, key);
+    if (!byCode.has(e.code)) byCode.set(e.code, key);
   }
   return byCode;
 }

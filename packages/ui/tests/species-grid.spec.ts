@@ -158,18 +158,61 @@ describe('import + save diff', () => {
 
   it('diffCodes finds renames and deletions, and nothing for untouched lists', () => {
     const saved = [entry('A'), entry('B'), entry('C')];
-    expect(diffCodes(saved, toDraft(saved))).toEqual({ renames: new Map(), deleted: [] });
+    expect(diffCodes(saved, toDraft(saved))).toEqual({ renames: new Map(), merges: new Set(), deleted: [] });
 
     const rows = toDraft(saved);
     rows[0]!.code = 'A2'; // rename
     rows.splice(1, 1); // delete B
-    expect(diffCodes(saved, rows)).toEqual({ renames: new Map([['A', 'A2']]), deleted: ['B'] });
+    expect(diffCodes(saved, rows)).toEqual({ renames: new Map([['A', 'A2']]), merges: new Set(), deleted: ['B'] });
   });
 
   it('a replaced list keeps codes that are still present (not deleted)', () => {
     const saved = [entry('A'), entry('B')];
     const rows = toDraft([entry('B'), entry('Z')], false);
-    expect(diffCodes(saved, rows)).toEqual({ renames: new Map(), deleted: ['A'] });
+    expect(diffCodes(saved, rows)).toEqual({ renames: new Map(), merges: new Set(), deleted: ['A'] });
+  });
+
+  it('editing one row of a repeated code is a new code, not a rename', () => {
+    const saved = [entry('A'), entry('A', { species: 'Again' })];
+    const rows = toDraft(saved);
+    rows[1]!.code = 'C';
+    expect(diffCodes(saved, rows)).toEqual({ renames: new Map(), merges: new Set(), deleted: [] });
+
+    // edited two different ways: no single new name, so A counts as removed
+    rows[0]!.code = 'D';
+    expect(diffCodes(saved, rows)).toEqual({ renames: new Map(), merges: new Set(), deleted: ['A'] });
+  });
+
+  it('renaming onto a removed saved code is a merge; a swap is not', () => {
+    const saved = [entry('A'), entry('B')];
+    const merged = toDraft(saved).slice(0, 1);
+    merged[0]!.code = 'B'; // B deleted, A renamed to B
+    expect(diffCodes(saved, merged)).toEqual({
+      renames: new Map([['A', 'B']]),
+      merges: new Set(['B']),
+      deleted: [],
+    });
+
+    const swapped = toDraft(saved);
+    swapped[0]!.code = 'B';
+    swapped[1]!.code = 'A';
+    expect(diffCodes(saved, swapped)).toEqual({
+      renames: new Map([['A', 'B'], ['B', 'A']]),
+      merges: new Set(),
+      deleted: [],
+    });
+  });
+
+  it('a rename chain renames every link', () => {
+    const saved = [entry('A'), entry('B')];
+    const rows = toDraft(saved);
+    rows[0]!.code = 'B';
+    rows[1]!.code = 'C';
+    expect(diffCodes(saved, rows)).toEqual({
+      renames: new Map([['A', 'B'], ['B', 'C']]),
+      merges: new Set(),
+      deleted: [],
+    });
   });
 });
 
